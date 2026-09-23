@@ -1,0 +1,109 @@
+@import 'tailwindcss';
+
+:root {
+  --wb-font:
+    ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --wb-blue: #3b6cff;
+  color-scheme: light;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  overflow: hidden;
+  background: #f5f5f3;
+  color: #1f1f1f;
+  font-family: var(--wb-font);
+  -webkit-font-smoothing: antialiased;
+}
+
+button {
+  cursor: pointer;
+}
+
+.wb-canvas {
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  outline: none;
+}
+
+.wb-text {
+  font-family: var(--wb-font);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.wb-editor {
+  display: block;
+  resize: none;
+  border: 0;
+  outline: 0;
+  padding: 0;
+  margin: 0;
+  background: transparent;
+  overflow: hidden;
+  user-select: text;
+  -webkit-user-select: text;
+  caret-color: var(--wb-blue);
+}
+
+.wb-sticky {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 2px;
+  box-shadow:
+    0 1px 2px rgb(0 0 0 / 0.08),
+    0 8px 16px -8px rgb(0 0 0 / 0.28);
+}
+
+.wb-frame {
+  box-shadow:
+    0 0 0 1px rgb(0 0 0 / 0.1),
+    0 2px 10px rgb(0 0 0 / 0.04);
+}
+
+.wb-frame-title {
+  position: absolute;
+  left: 0;
+  bottom: 100%;
+  transform-origin: bottom left;
+  padding-bottom: 6px;
+  font-size: 13px;
+  line-height: 18px;
+  color: #6b6b6b;
+  white-space: nowrap;
+  cursor: default;
+}
+
+.wb-frame-title-input {
+  font: inherit;
+  color: #1f1f1f;
+  min-width: 140px;
+  padding: 0 4px;
+  border: 1px solid var(--wb-blue);
+  border-radius: 4px;
+  background: white;
+  outline: none;
+}
+
+.wb-panel {
+  background: white;
+  border: 1px solid #e7e7e4;
+  border-radius: 12px;
+  box-shadow: 0 2px 12px rgb(0 0 0 / 0.08);
+}
+
+.wb-handle {
+  width: 10px;
+  height: 10px;
+  background: white;
+  border: 1.5px solid var(--wb-blue);
+  border-radius: 2px;
+}

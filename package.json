@@ -1,0 +1,43 @@
+{
+  "name": "whiteboard",
+  "private": true,
+  "version": "0.1.0",
+  "description": "A standalone infinite whiteboard",
+  "type": "module",
+  "main": "electron/main.cjs",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "lint": "oxlint",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "vitest run",
+    "verify": "tsc -b && oxlint && prettier --check . && vitest run && vite build",
+    "preview": "vite preview",
+    "app:dev": "WHITEBOARD_DEV_URL=http://localhost:5173 electron .",
+    "app:build": "npm run build && electron-builder --mac --dir && codesign --force --deep --sign - release/mac-arm64/Whiteboard.app",
+    "app:open": "open release/mac-arm64/Whiteboard.app"
+  },
+  "dependencies": {
+    "lucide-react": "^1.47.0",
+    "perfect-freehand": "^1.2.3",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "zustand": "^5.0.15"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.3.3",
+    "@types/node": "^24.13.3",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.7",
+    "@vitejs/plugin-react": "^6.1.1",
+    "electron": "^44.4.4",
+    "electron-builder": "^26.15.3",
+    "oxlint": "^1.81.0",
+    "prettier": "^3.9.8",
+    "tailwindcss": "^4.3.3",
+    "typescript": "~6.0.2",
+    "vite": "^8.3.0",
+    "vitest": "^5.0.1"
+  }
+}
