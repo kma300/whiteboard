@@ -5,12 +5,14 @@ import {
   distance,
   fmt,
   mul,
+  nearestSide,
   normalize,
+  rectCenter,
   sideAnchor,
   sideNormal,
   sub,
 } from './geometry'
-import type { ConnectorEnd, ConnectorItem, Item, Items, Rect, Vec } from './types'
+import type { ConnectorEnd, ConnectorItem, Item, Items, Rect, Side, Vec } from './types'
 
 export interface ResolvedEnd {
   point: Vec
@@ -18,11 +20,57 @@ export interface ResolvedEnd {
   normal: Vec | null
 }
 
+/** Where one end sits on its stored side, without regard to the other end. */
 export function resolveEnd(end: ConnectorEnd, items: Items): ResolvedEnd | null {
   if (end.kind === 'point') return { point: { x: end.x, y: end.y }, normal: null }
   const item = items[end.itemId]
   if (!item || item.type === 'connector') return null
   return { point: sideAnchor(boxRect(item), end.side), normal: sideNormal(end.side) }
+}
+
+/** A resolved end plus the box of its item, which the line should stay out of. */
+interface RoutedEnd extends ResolvedEnd {
+  rect: Rect | null
+}
+
+/** What an end holds on to: one side of an item's box, or a free point. */
+type Hold = { rect: Rect; side: Side } | { rect: null; point: Vec }
+
+function holdOf(end: ConnectorEnd, items: Items): Hold | null {
+  if (end.kind === 'point') return { rect: null, point: { x: end.x, y: end.y } }
+  const item = items[end.itemId]
+  if (!item || item.type === 'connector') return null
+  return { rect: boxRect(item), side: end.side }
+}
+
+const holdBox = (hold: Hold): Rect =>
+  hold.rect ? hold.rect : { x: hold.point.x, y: hold.point.y, w: 0, h: 0 }
+
+/** True when `other` lies entirely past the edge of `r` opposite `side`. */
+function isBehind(r: Rect, side: Side, other: Rect): boolean {
+  switch (side) {
+    case 'top':
+      return other.y >= r.y + r.h
+    case 'right':
+      return other.x + other.w <= r.x
+    case 'bottom':
+      return other.y + other.h <= r.y
+    case 'left':
+      return other.x >= r.x + r.w
+  }
+}
+
+/**
+ * Where an end attaches. It keeps its side unless the other end lies entirely behind that side,
+ * where the line would have to wrap around its own item; then it turns to face the other end.
+ */
+function routeEnd(hold: Hold, other: Hold): RoutedEnd {
+  if (!hold.rect) return { point: hold.point, normal: null, rect: null }
+  const box = holdBox(other)
+  const side = isBehind(hold.rect, hold.side, box)
+    ? nearestSide(hold.rect, rectCenter(box))
+    : hold.side
+  return { point: sideAnchor(hold.rect, side), normal: sideNormal(side), rect: hold.rect }
 }
 
 export interface ConnectorGeometry {
@@ -42,15 +90,19 @@ type ConnectorShape = Pick<ConnectorItem, 'start' | 'end' | 'style'> &
 
 const ELBOW_GAP = 24
 const ELBOW_RADIUS = 10
+/** Extra length a detour pays per bend, so it prefers fewer turns over a slightly shorter path. */
+const BEND_COST = 30
 
 export function arrowLength(strokeWidth: number) {
   return 10 + strokeWidth * 2.5
 }
 
 export function connectorGeometry(c: ConnectorShape, items: Items): ConnectorGeometry | null {
-  const a = resolveEnd(c.start, items)
-  const b = resolveEnd(c.end, items)
-  if (!a || !b) return null
+  const holdA = holdOf(c.start, items)
+  const holdB = holdOf(c.end, items)
+  if (!holdA || !holdB) return null
+  const a = routeEnd(holdA, holdB)
+  const b = routeEnd(holdB, holdA)
   const arrow = arrowLength(c.strokeWidth ?? 2) * 0.7
   const trimStart = c.startArrow === 'arrow' ? arrow : 0
   const trimEnd = c.endArrow === 'arrow' ? arrow : 0
@@ -87,18 +139,25 @@ function cubicAt(p0: Vec, p1: Vec, p2: Vec, p3: Vec, t: number): Vec {
   }
 }
 
-function curved(a: ResolvedEnd, b: ResolvedEnd, trimStart: number, trimEnd: number) {
+function curved(a: RoutedEnd, b: RoutedEnd, trimStart: number, trimEnd: number): ConnectorGeometry {
   const k = Math.max(30, distance(a.point, b.point) * 0.4)
   const dirA = a.normal ?? normalize(sub(b.point, a.point))
   const dirB = b.normal ?? normalize(sub(a.point, b.point))
   const c1 = add(a.point, mul(dirA, k))
   const c2 = add(b.point, mul(dirB, k))
+  const points: Vec[] = []
+  for (let i = 0; i <= 16; i++) points.push(cubicAt(a.point, c1, c2, b.point, i / 16))
+  // A curve that would cut through one of its own items follows the elbow route around them
+  // instead, with every corner rounded as far as it goes so the line still reads as a curve.
+  const boxes = obstacles(a, b)
+  if (crossesAny(points, boxes)) {
+    const route = elbowRoute(a, b)
+    if (!crossesAny(route, boxes)) return polylineGeometry(route, trimStart, trimEnd, Infinity)
+  }
   const startDir = normalize(sub(a.point, c1))
   const endDir = normalize(sub(b.point, c2))
   const s = sub(a.point, mul(startDir, trimStart))
   const e = sub(b.point, mul(endDir, trimEnd))
-  const points: Vec[] = []
-  for (let i = 0; i <= 16; i++) points.push(cubicAt(a.point, c1, c2, b.point, i / 16))
   return {
     d: `M ${fmt(s)} C ${fmt(c1)} ${fmt(c2)} ${fmt(e)}`,
     points,
@@ -148,7 +207,19 @@ function roundedPath(points: Vec[], radius: number): string {
   return `${d} L ${fmt(points[points.length - 1])}`
 }
 
-function elbow(a: ResolvedEnd, b: ResolvedEnd, trimStart: number, trimEnd: number) {
+function elbow(a: RoutedEnd, b: RoutedEnd, trimStart: number, trimEnd: number) {
+  return polylineGeometry(elbowRoute(a, b), trimStart, trimEnd, ELBOW_RADIUS)
+}
+
+/** The direct elbow route, or the best detour around the connected items when it cuts one. */
+function elbowRoute(a: RoutedEnd, b: RoutedEnd): Vec[] {
+  const route = directElbow(a, b)
+  const boxes = obstacles(a, b)
+  if (!crossesAny(route, boxes)) return route
+  return detour(a, b, boxes) ?? route
+}
+
+function directElbow(a: RoutedEnd, b: RoutedEnd): Vec[] {
   const p0 = a.point
   const p3 = b.point
   const na = a.normal ?? axisToward(p0, p3)
@@ -175,7 +246,78 @@ function elbow(a: ResolvedEnd, b: ResolvedEnd, trimStart: number, trimEnd: numbe
   } else {
     mid = [{ x: p1.x, y: p2.y }]
   }
-  const points = simplify([p0, p1, ...mid, p2, p3])
+  return simplify([p0, p1, ...mid, p2, p3])
+}
+
+/**
+ * Cheapest orthogonal route from `a` to `b` that stays out of `boxes`. It leaves and enters
+ * through the usual stubs and tries up to three turns between them, along lines beside and
+ * between the boxes. Null when no such route is clear.
+ */
+function detour(a: RoutedEnd, b: RoutedEnd, boxes: Rect[]): Vec[] | null {
+  const na = a.normal ?? axisToward(a.point, b.point)
+  const nb = b.normal ?? axisToward(b.point, a.point)
+  const p1 = add(a.point, mul(na, ELBOW_GAP))
+  const p2 = add(b.point, mul(nb, ELBOW_GAP))
+  const xs = [p1.x, p2.x, (p1.x + p2.x) / 2]
+  const ys = [p1.y, p2.y, (p1.y + p2.y) / 2]
+  for (const r of boxes) {
+    xs.push(r.x - ELBOW_GAP, r.x + r.w + ELBOW_GAP)
+    ys.push(r.y - ELBOW_GAP, r.y + r.h + ELBOW_GAP)
+    for (const s of boxes) {
+      // The middle of the gap between two boxes, when there is one.
+      if (s.x > r.x + r.w) xs.push((r.x + r.w + s.x) / 2)
+      if (s.y > r.y + r.h) ys.push((r.y + r.h + s.y) / 2)
+    }
+  }
+  const mids: Vec[][] = []
+  for (const x of xs) {
+    mids.push([
+      { x, y: p1.y },
+      { x, y: p2.y },
+    ])
+  }
+  for (const y of ys) {
+    mids.push([
+      { x: p1.x, y },
+      { x: p2.x, y },
+    ])
+  }
+  for (const x of xs) {
+    for (const y of ys) {
+      mids.push([
+        { x: p1.x, y },
+        { x, y },
+        { x, y: p2.y },
+      ])
+      mids.push([
+        { x, y: p1.y },
+        { x, y },
+        { x: p2.x, y },
+      ])
+    }
+  }
+  let best: Vec[] | null = null
+  let bestCost = Infinity
+  for (const mid of mids) {
+    const route = simplify([a.point, p1, ...mid, p2, b.point])
+    if (crossesAny(route, boxes)) continue
+    const cost = pathLength(route) + (route.length - 2) * BEND_COST
+    if (cost < bestCost) {
+      best = route
+      bestCost = cost
+    }
+  }
+  return best
+}
+
+/** Geometry for a line along `points`, corners rounded up to `radius` (Infinity: fully). */
+function polylineGeometry(
+  points: Vec[],
+  trimStart: number,
+  trimEnd: number,
+  radius: number,
+): ConnectorGeometry {
   const startDir = normalize(sub(points[0], points[1]))
   const endDir = normalize(sub(points[points.length - 1], points[points.length - 2]))
   const trimmed = points.map((p) => ({ ...p }))
@@ -187,13 +329,63 @@ function elbow(a: ResolvedEnd, b: ResolvedEnd, trimStart: number, trimEnd: numbe
     mul(endDir, Math.min(trimEnd, lastLen / 2)),
   )
   return {
-    d: roundedPath(trimmed, ELBOW_RADIUS),
+    d: roundedPath(trimmed, radius),
     points,
-    start: p0,
-    end: p3,
+    start: points[0],
+    end: points[points.length - 1],
     startDir,
     endDir,
   }
+}
+
+const obstacles = (a: RoutedEnd, b: RoutedEnd): Rect[] =>
+  [a.rect, b.rect].filter((r): r is Rect => r !== null)
+
+function pathLength(points: Vec[]): number {
+  let total = 0
+  for (let i = 1; i < points.length; i++) total += distance(points[i - 1], points[i])
+  return total
+}
+
+/** True when any segment of the polyline passes through the inside of one of `boxes`. */
+function crossesAny(points: Vec[], boxes: Rect[]): boolean {
+  for (let i = 1; i < points.length; i++) {
+    for (const r of boxes) if (segmentCrosses(points[i - 1], points[i], r)) return true
+  }
+  return false
+}
+
+/**
+ * True when segment p-q passes through the inside of `r`. Touching or running along an edge does
+ * not count, so the box shrinks by one unit before the Liang-Barsky clip.
+ */
+function segmentCrosses(p: Vec, q: Vec, r: Rect): boolean {
+  const x1 = r.x + 1
+  const y1 = r.y + 1
+  const x2 = r.x + r.w - 1
+  const y2 = r.y + r.h - 1
+  if (x1 >= x2 || y1 >= y2) return false
+  const dx = q.x - p.x
+  const dy = q.y - p.y
+  let t0 = 0
+  let t1 = 1
+  const clips: [number, number][] = [
+    [-dx, p.x - x1],
+    [dx, x2 - p.x],
+    [-dy, p.y - y1],
+    [dy, y2 - p.y],
+  ]
+  for (const [pk, qk] of clips) {
+    if (pk === 0) {
+      if (qk < 0) return false
+      continue
+    }
+    const t = qk / pk
+    if (pk < 0) t0 = Math.max(t0, t)
+    else t1 = Math.min(t1, t)
+    if (t0 >= t1) return false
+  }
+  return true
 }
 
 /** Filled triangle whose tip sits at `tip`, pointing along `dir`. */
