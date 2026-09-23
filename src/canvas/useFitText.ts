@@ -32,17 +32,21 @@ export function fitFontSize(
   max: number,
   bold: boolean,
 ): number {
-  if (!text.trim() || width <= 0 || height <= 0) return max
-  const key = `${width}|${height}|${max}|${bold ? 1 : 0}|${text}`
+  // scrollWidth and scrollHeight are whole pixels, so measure against whole-pixel bounds.
+  // A fractional width (137.6px) would otherwise read back as 138 and never "fit".
+  const w = Math.floor(width)
+  const h = Math.floor(height)
+  if (!text.trim() || w <= 0 || h <= 0) return max
+  const key = `${w}|${h}|${max}|${bold ? 1 : 0}|${text}`
   const hit = cache.get(key)
   if (hit !== undefined) return hit
   const m = getMeasurer()
-  m.style.width = `${width}px`
+  m.style.width = `${w}px`
   m.style.fontWeight = bold ? '700' : '400'
   m.textContent = text
   const fits = (size: number) => {
     m.style.fontSize = `${size}px`
-    return m.scrollHeight <= height && m.scrollWidth <= width
+    return m.scrollHeight <= h && m.scrollWidth <= w
   }
   let best = MIN_FONT
   if (fits(max)) {

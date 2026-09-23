@@ -1,16 +1,70 @@
+import { Download, Map as MapIcon } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Canvas } from '../canvas/Canvas'
 import { installClipboard } from '../canvas/clipboard'
 import { flushAutosave, startAutosave } from '../persist/autosave'
 import { getBoard } from '../persist/db'
-import { loadBoard, unloadBoard } from '../store/boardStore'
+import { loadBoard, unloadBoard, useBoard } from '../store/boardStore'
 import { installKeyboard } from '../store/commands'
+import { IconButton } from './buttons'
 import { ContextToolbar } from './ContextToolbar'
+import { downloadBoardJson } from './exportBoard'
+import { Minimap } from './Minimap'
 import { Toolbar } from './Toolbar'
 import { TopBar } from './TopBar'
 import { ZoomControls } from './ZoomControls'
 
 type Status = 'loading' | 'ready' | 'missing'
+
+function EmptyHint() {
+  const empty = useBoard((s) => s.order.length === 0)
+  if (!empty) return null
+  return (
+    <div className="pointer-events-none fixed inset-0 z-10 grid place-items-center">
+      <div className="text-center text-sm text-neutral-500">
+        <p className="font-medium text-neutral-700">This board is empty</p>
+        <p className="mt-1">Pick a tool on the left, or press N and click to add a sticky note.</p>
+      </div>
+    </div>
+  )
+}
+
+function BoardView() {
+  const name = useBoard((s) => s.name)
+  const [showMinimap, setShowMinimap] = useState(true)
+
+  useEffect(() => {
+    if (name) document.title = `${name} · Whiteboard`
+  }, [name])
+
+  return (
+    <div className="relative h-full w-full">
+      <Canvas />
+      <EmptyHint />
+      <TopBar>
+        <div className="h-5 w-px bg-neutral-200" />
+        <IconButton
+          icon={Download}
+          label="Export board (.json)"
+          testId="export-board"
+          onClick={downloadBoardJson}
+        />
+      </TopBar>
+      <Toolbar />
+      <ContextToolbar />
+      {showMinimap && <Minimap />}
+      <ZoomControls>
+        <IconButton
+          icon={MapIcon}
+          label={showMinimap ? 'Hide minimap' : 'Show minimap'}
+          active={showMinimap}
+          onClick={() => setShowMinimap((v) => !v)}
+        />
+        <div className="mx-0.5 h-5 w-px bg-neutral-200" />
+      </ZoomControls>
+    </div>
+  )
+}
 
 export function BoardPage({ id }: { id: string }) {
   const [status, setStatus] = useState<Status>('loading')
@@ -25,7 +79,6 @@ export function BoardPage({ id }: { id: string }) {
         return
       }
       loadBoard(doc)
-      document.title = `${doc.name} · Whiteboard`
       setStatus('ready')
     })
     return () => {
@@ -60,13 +113,5 @@ export function BoardPage({ id }: { id: string }) {
       </div>
     )
   }
-  return (
-    <div className="relative h-full w-full">
-      <Canvas />
-      <TopBar />
-      <Toolbar />
-      <ContextToolbar />
-      <ZoomControls />
-    </div>
-  )
+  return <BoardView />
 }
