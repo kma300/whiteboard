@@ -461,17 +461,21 @@ export function createInteractions(el: HTMLElement): () => void {
   }
 
   /** Drags one end of the selected connector to re-attach it or leave it free. */
-  function connectorEndGesture(which: 'start' | 'end'): Gesture | null {
+  function connectorEndGesture(which: 'start' | 'end', start: Pointer): Gesture | null {
     const s = state()
     const connector = s.items[s.selection[0]]
     if (!connector || connector.type !== 'connector' || connector.locked) return null
     const other = which === 'start' ? connector.end : connector.start
     const exclude = other.kind === 'item' ? other.itemId : null
     const facing = (p: Pointer) => resolveEnd(other, state().items)?.point ?? p.world
+    let moved = false
     B.beginTx()
     return {
       cursor: 'crosshair',
       move(p) {
+        // A plain click on the handle leaves the end where it is, even off the item's edge.
+        if (!moved && distance(p.screen, start.screen) < DRAG_THRESHOLD) return
+        moved = true
         const target = connectTargetAt(p, exclude)
         const end: ConnectorEnd = target
           ? {
@@ -537,8 +541,8 @@ export function createInteractions(el: HTMLElement): () => void {
   function selectGesture(target: Element, p: Pointer): Gesture | null {
     const s = state()
     const handle = target.closest('[data-handle]')?.getAttribute('data-handle')
-    if (handle === 'conn-start') return connectorEndGesture('start')
-    if (handle === 'conn-end') return connectorEndGesture('end')
+    if (handle === 'conn-start') return connectorEndGesture('start', p)
+    if (handle === 'conn-end') return connectorEndGesture('end', p)
     if (handle && handle in HANDLE_CURSOR) return resizeGesture(handle as Handle, p)
 
     const anchor = anchorAt(target)
