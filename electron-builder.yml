@@ -1,0 +1,21 @@
+appId: local.whiteboard.desktop
+productName: Whiteboard
+directories:
+  output: release
+  buildResources: build
+files:
+  - dist/**/*
+  - electron/**/*
+  - package.json
+  # The web app is bundled into dist, so the packaged app needs no node_modules.
+  - '!node_modules/**/*'
+mac:
+  target:
+    - target: dir
+  category: public.app-category.productivity
+  icon: build/icon.png
+  # Local build: skip signing here and ad-hoc sign afterwards (see the app:build script).
+  # Ad-hoc signing combined with hardened runtime crashes the Electron framework on launch.
+  identity: null
+  hardenedRuntime: false
+npmRebuild: false
