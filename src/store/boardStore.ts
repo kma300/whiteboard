@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { cloneItems, collectForCopy } from '../model/clone'
-import { connectorsAttachedTo, itemBounds } from '../model/connectors'
+import { connectorsAttachedTo, itemBounds, withoutDanglingConnectors } from '../model/connectors'
 import {
   boxRect,
   fitCamera,
@@ -251,14 +251,16 @@ export function redo(): void {
 
 export function loadBoard(doc: BoardDoc): void {
   tx = null
+  // Boards saved before emptied text boxes took their connectors along can hold orphans.
+  const items = withoutDanglingConnectors(doc.items)
   set({
     ...boardDefaults(),
     boardId: doc.id,
     name: doc.name,
     createdAt: doc.createdAt,
     updatedAt: doc.updatedAt,
-    items: doc.items,
-    order: computeOrder(doc.items),
+    items,
+    order: computeOrder(items),
     camera: doc.camera,
   })
 }
@@ -437,7 +439,7 @@ export function stopEditing(): void {
   const id = s.editingId
   if (!id) return
   const item = s.items[id]
-  if (item?.type === 'text' && item.text.trim() === '') change({ [id]: null })
+  if (item?.type === 'text' && item.text.trim() === '') deleteItems([id])
   set({ editingId: null, selection: existing(get().selection) })
   commitTx()
 }

@@ -211,6 +211,21 @@ export function itemBounds(item: Item, items: Items): Rect | null {
   return g ? boundsOfPoints(g.points) : null
 }
 
+/** `items` without the connectors whose attached item is missing. */
+export function withoutDanglingConnectors(items: Items): Items {
+  let out: Items | null = null
+  for (const it of Object.values(items)) {
+    if (it.type !== 'connector') continue
+    const dangling =
+      (it.start.kind === 'item' && !items[it.start.itemId]) ||
+      (it.end.kind === 'item' && !items[it.end.itemId])
+    if (!dangling) continue
+    out ??= { ...items }
+    delete out[it.id]
+  }
+  return out ?? items
+}
+
 /** Connectors that have an end attached to any of `ids`. */
 export function connectorsAttachedTo(ids: Set<string>, items: Items): string[] {
   const out: string[] = []

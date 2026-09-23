@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest'
-import { createConnector, createFrame, createSticky } from '../model/factories'
+import { createConnector, createFrame, createSticky, createText } from '../model/factories'
 import { BOARD_VERSION } from '../model/types'
 import type { StickyItem } from '../model/types'
 import {
@@ -106,6 +106,48 @@ describe('item operations', () => {
     deleteSelection()
     expect(state().items[c.id]).toBeUndefined()
     expect(state().items[b.id]).toBeDefined()
+  })
+
+  it('removes the connectors of a text box emptied while editing, in one undo step', () => {
+    const a = sticky(0, 0)
+    const t = { ...createText({ x: 400, y: 0 }, 2), text: 'hello' }
+    const c = createConnector(
+      { kind: 'item', itemId: a.id, side: 'right' },
+      { kind: 'item', itemId: t.id, side: 'left' },
+      'straight',
+      3,
+    )
+    addItems([a, t, c])
+    startEditing(t.id)
+    setItemText(t.id, '')
+    stopEditing()
+    expect(state().items[t.id]).toBeUndefined()
+    expect(state().items[c.id]).toBeUndefined()
+    expect(state().items[a.id]).toBeDefined()
+    undo()
+    expect(state().items[t.id]).toMatchObject({ text: 'hello' })
+    expect(state().items[c.id]).toBeDefined()
+  })
+
+  it('drops connectors whose attached item is missing when a board loads', () => {
+    const a = sticky(0, 0)
+    const orphan = createConnector(
+      { kind: 'item', itemId: a.id, side: 'right' },
+      { kind: 'item', itemId: 'gone', side: 'left' },
+      'straight',
+      2,
+    )
+    loadBoard({
+      version: BOARD_VERSION,
+      id: 'b2',
+      name: 'Saved',
+      createdAt: 0,
+      updatedAt: 0,
+      items: { [a.id]: a, [orphan.id]: orphan },
+      camera: { x: 0, y: 0, zoom: 1 },
+    })
+    expect(Object.keys(state().items)).toEqual([a.id])
+    expect(state().order).toEqual([a.id])
   })
 
   it('duplicates with new ids and remaps connectors between copies', () => {

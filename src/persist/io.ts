@@ -1,3 +1,4 @@
+import { withoutDanglingConnectors } from '../model/connectors'
 import { BOARD_VERSION } from '../model/types'
 import type {
   ArrowHead,
@@ -163,14 +164,7 @@ export function sanitizeItems(raw: unknown[]): Items {
     const it = sanitizeItem(r)
     if (it) items[it.id] = it
   }
-  for (const it of Object.values(items)) {
-    if (it.type !== 'connector') continue
-    const dangling =
-      (it.start.kind === 'item' && !items[it.start.itemId]) ||
-      (it.end.kind === 'item' && !items[it.end.itemId])
-    if (dangling) delete items[it.id]
-  }
-  return items
+  return withoutDanglingConnectors(items)
 }
 
 function camera(raw: unknown): Camera {
