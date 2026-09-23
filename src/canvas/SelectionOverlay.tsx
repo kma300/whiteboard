@@ -147,7 +147,7 @@ export function SelectionOverlay() {
               key={side}
               data-anchor-item={dotsFor.id}
               data-anchor-side={side}
-              title="Drag to connect"
+              title="Click for an arrow, or drag to connect"
               className="wb-anchor pointer-events-auto absolute"
               style={{ left: a.x + off.x - 7, top: a.y + off.y - 7 }}
             />

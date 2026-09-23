@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  attachSide,
   distToSegment,
   fitCamera,
   nearestSide,
@@ -64,6 +65,13 @@ describe('rects', () => {
     expect(nearestSide(r, { x: 100, y: -30 })).toBe('top')
     expect(nearestSide(r, { x: -10, y: 60 })).toBe('left')
     expect(nearestSide(r, { x: 90, y: 140 })).toBe('bottom')
+  })
+
+  it('attaches to the side facing the other end when dropped mid-item', () => {
+    const r = { x: 400, y: 0, w: 200, h: 200 }
+    expect(attachSide(r, { x: 500, y: 100 }, { x: 100, y: 100 })).toBe('left')
+    expect(attachSide(r, { x: 500, y: 10 }, { x: 100, y: 100 })).toBe('top')
+    expect(attachSide(r, { x: 590, y: 100 }, { x: 100, y: 100 })).toBe('right')
   })
 
   it('measures distance to a segment', () => {

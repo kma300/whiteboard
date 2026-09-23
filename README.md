@@ -23,8 +23,9 @@ The app is installed at `/Applications/Whiteboard.app`. After changing the code,
   Zoom with pinch, Cmd+scroll, the zoom controls, Cmd+0, Shift+1 (fit), Shift+2 (selection).
 - Sticky notes (auto-fitting text), text, shapes, connectors (straight, elbow, curved, with
   arrowheads), pen, highlighter, eraser, frames, and images (upload, drag and drop, paste).
-- Hover a sticky or shape and drag a blue dot to connect it. Drop the line on empty canvas to
-  create a matching item there.
+- Hover a sticky or shape and click a blue dot for a straight arrow out of that side, then drag
+  its end onto another item to attach it. Or drag the dot to draw the connection yourself; drop
+  it on empty canvas to create a matching item there.
 - Select, Shift+click, marquee, move, resize, Alt+drag to duplicate, group, lock, layer order,
   and a floating toolbar for colors, text, and line styles.
 - Undo and redo for every change, copy/cut/paste, a minimap, and board templates (Kanban,

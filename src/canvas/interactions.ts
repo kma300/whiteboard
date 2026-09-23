@@ -1,4 +1,4 @@
-import { itemBounds } from '../model/connectors'
+import { itemBounds, resolveEnd } from '../model/connectors'
 import {
   createConnector,
   createFrame,
@@ -8,6 +8,7 @@ import {
   createText,
 } from '../model/factories'
 import {
+  attachSide,
   boxRect,
   clamp,
   distance,
@@ -21,6 +22,8 @@ import {
   rectsIntersect,
   resizeRect,
   screenToWorld,
+  sideAnchor,
+  sideNormal,
   unionRects,
   zoomAt,
 } from '../model/geometry'
@@ -55,6 +58,8 @@ interface Gesture {
 const DRAG_THRESHOLD = 3
 const DOUBLE_CLICK_MS = 400
 const MIN_ITEM_SIZE = 8
+/** On-screen length of the arrow a click on a connection dot creates. */
+const QUICK_ARROW_PX = 140
 const SIDES: Side[] = ['top', 'right', 'bottom', 'left']
 
 const HANDLE_CURSOR: Record<Handle, string> = {
@@ -394,10 +399,12 @@ export function createInteractions(el: HTMLElement): () => void {
   function connectGesture(start: Pointer, from: ConnectorEnd, sourceId: string | null): Gesture {
     const style = state().toolOptions.connectorStyle
     let dragged = false
+    // Where the line comes from, so a drop near an item's middle attaches to the facing side.
+    const facing = (p: Pointer) => resolveEnd(from, state().items)?.point ?? p.world
     const endFor = (p: Pointer) => {
       const target = connectTargetAt(p, sourceId)
       const end: ConnectorEnd = target
-        ? { kind: 'item', itemId: target.id, side: nearestSide(boxRect(target), p.world) }
+        ? { kind: 'item', itemId: target.id, side: attachSide(boxRect(target), p.world, facing(p)) }
         : { kind: 'point', x: p.world.x, y: p.world.y }
       return { end, targetId: target?.id ?? null }
     }
@@ -410,7 +417,11 @@ export function createInteractions(el: HTMLElement): () => void {
       },
       up(p) {
         B.setDraftConnector(null)
-        if (!dragged) return
+        if (!dragged) {
+          // A plain click on a connection dot makes a standard straight arrow.
+          if (sourceId && from.kind === 'item') quickArrow(from)
+          return
+        }
         let { end } = endFor(p)
         const s = state()
         const source = sourceId ? s.items[sourceId] : undefined
@@ -456,13 +467,18 @@ export function createInteractions(el: HTMLElement): () => void {
     if (!connector || connector.type !== 'connector' || connector.locked) return null
     const other = which === 'start' ? connector.end : connector.start
     const exclude = other.kind === 'item' ? other.itemId : null
+    const facing = (p: Pointer) => resolveEnd(other, state().items)?.point ?? p.world
     B.beginTx()
     return {
       cursor: 'crosshair',
       move(p) {
         const target = connectTargetAt(p, exclude)
         const end: ConnectorEnd = target
-          ? { kind: 'item', itemId: target.id, side: nearestSide(boxRect(target), p.world) }
+          ? {
+              kind: 'item',
+              itemId: target.id,
+              side: attachSide(boxRect(target), p.world, facing(p)),
+            }
           : { kind: 'point', x: p.world.x, y: p.world.y }
         B.setHover(target?.id ?? null)
         B.change({
@@ -478,6 +494,20 @@ export function createInteractions(el: HTMLElement): () => void {
         B.cancelTx()
       },
     }
+  }
+
+  /** Straight arrow pointing out of the clicked side, selected so its end can be dragged on. */
+  function quickArrow(from: Extract<ConnectorEnd, { kind: 'item' }>) {
+    const s = state()
+    const item = s.items[from.itemId]
+    if (!item || !isBox(item)) return
+    const anchor = sideAnchor(boxRect(item), from.side)
+    const normal = sideNormal(from.side)
+    const length = QUICK_ARROW_PX / s.camera.zoom
+    const tip = { x: anchor.x + normal.x * length, y: anchor.y + normal.y * length }
+    const arrow = createConnector(from, { kind: 'point', ...tip }, 'straight', B.nextZ())
+    B.setTool('select')
+    B.addItems([arrow])
   }
 
   function placeSticky(p: Pointer) {

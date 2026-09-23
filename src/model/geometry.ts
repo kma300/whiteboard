@@ -136,6 +136,15 @@ export function nearestSide(r: Rect, p: Vec): Side {
   return dy > 0 ? 'bottom' : 'top'
 }
 
+/**
+ * Side of `r` a connector end dropped at `p` should attach to: the nearest edge, or, when dropped
+ * near the middle, the side facing `from` (the connector's other end), so the line comes in clean.
+ */
+export function attachSide(r: Rect, p: Vec, from: Vec): Side {
+  const middle = { x: r.x + r.w * 0.25, y: r.y + r.h * 0.25, w: r.w * 0.5, h: r.h * 0.5 }
+  return rectContains(middle, p) ? nearestSide(r, from) : nearestSide(r, p)
+}
+
 export const boxRect = (item: BoxItem): Rect => ({ x: item.x, y: item.y, w: item.w, h: item.h })
 
 /** Camera that fits `bounds` inside a viewport, never zooming in past `maxZoom`. */
