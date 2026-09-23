@@ -1,15 +1,18 @@
 import { Lock } from 'lucide-react'
-import { itemBounds } from '../model/connectors'
-import { toScreenRect, unionRects } from '../model/geometry'
+import { connectorGeometry, itemBounds } from '../model/connectors'
+import { boxRect, sideAnchor, toScreenRect, unionRects, worldToScreen } from '../model/geometry'
 import type { Handle } from '../model/geometry'
 import { SELECTION_COLOR } from '../model/palette'
 import { isBox } from '../model/types'
-import type { Item, Rect } from '../model/types'
+import type { Item, Rect, Side } from '../model/types'
 import { useBoard } from '../store/boardStore'
+import { canConnect } from './interactions'
 
 const ALL: Handle[] = ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w']
 const CORNERS: Handle[] = ['nw', 'ne', 'se', 'sw']
 const TEXT_HANDLES: Handle[] = ['nw', 'ne', 'e', 'se', 'sw', 'w']
+const SIDES: Side[] = ['top', 'right', 'bottom', 'left']
+const ANCHOR_GAP = 16
 
 const CURSOR: Record<Handle, string> = {
   nw: 'nwse-resize',
@@ -39,6 +42,8 @@ function handlesFor(selected: Item[]): Handle[] {
   return ALL
 }
 
+const rectStyle = (r: Rect) => ({ left: r.x, top: r.y, width: r.w, height: r.h })
+
 export function SelectionOverlay() {
   const selection = useBoard((s) => s.selection)
   const items = useBoard((s) => s.items)
@@ -46,6 +51,9 @@ export function SelectionOverlay() {
   const interacting = useBoard((s) => s.interacting)
   const editingId = useBoard((s) => s.editingId)
   const marquee = useBoard((s) => s.marquee)
+  const hoverId = useBoard((s) => s.hoverId)
+  const tool = useBoard((s) => s.tool)
+  const snapTarget = useBoard((s) => s.draftConnector?.targetId ?? null)
 
   const selected = selection.map((id) => items[id]).filter(Boolean)
   const rects = selected
@@ -54,8 +62,26 @@ export function SelectionOverlay() {
     .map((r) => toScreenRect(r, camera))
   const box = unionRects(rects)
   const locked = selected.some((it) => it.locked)
+  const single = selected.length === 1 ? selected[0] : null
   const onlyConnectors = selected.length > 0 && selected.every((it) => it.type === 'connector')
   const handles = !box || interacting || editingId || locked ? [] : handlesFor(selected)
+
+  // Endpoint handles for a single selected connector.
+  const ends =
+    single?.type === 'connector' && !locked && !editingId ? connectorGeometry(single, items) : null
+
+  // Connection dots on the hovered item, or on a single selected item.
+  const dotsFor = hoverId ? items[hoverId] : single
+  const showDots =
+    !editingId &&
+    (tool === 'select' || tool === 'connector') &&
+    canConnect(dotsFor) &&
+    !dotsFor.locked &&
+    (!interacting || hoverId === dotsFor.id)
+  const dotRect = showDots ? toScreenRect(boxRect(dotsFor), camera) : null
+
+  const highlightId = snapTarget ?? (interacting ? hoverId : null)
+  const highlight = highlightId && items[highlightId] ? itemBounds(items[highlightId], items) : null
 
   return (
     <div className="pointer-events-none absolute inset-0">
@@ -64,14 +90,7 @@ export function SelectionOverlay() {
           <div
             key={i}
             className="absolute"
-            style={{
-              left: r.x,
-              top: r.y,
-              width: r.w,
-              height: r.h,
-              outline: `1px solid ${SELECTION_COLOR}`,
-              opacity: 0.55,
-            }}
+            style={{ ...rectStyle(r), outline: `1px solid ${SELECTION_COLOR}`, opacity: 0.55 }}
           />
         ))}
       {box && !onlyConnectors && (
@@ -99,6 +118,51 @@ export function SelectionOverlay() {
             />
           )
         })}
+      {ends &&
+        (['start', 'end'] as const).map((which) => {
+          const p = worldToScreen(which === 'start' ? ends.start : ends.end, camera)
+          return (
+            <div
+              key={which}
+              data-handle={`conn-${which}`}
+              className="wb-conn-handle pointer-events-auto absolute"
+              style={{ left: p.x - 6, top: p.y - 6 }}
+            />
+          )
+        })}
+      {dotRect &&
+        dotsFor &&
+        SIDES.map((side) => {
+          const a = sideAnchor(dotRect, side)
+          const off =
+            side === 'top'
+              ? { x: 0, y: -ANCHOR_GAP }
+              : side === 'bottom'
+                ? { x: 0, y: ANCHOR_GAP }
+                : side === 'left'
+                  ? { x: -ANCHOR_GAP, y: 0 }
+                  : { x: ANCHOR_GAP, y: 0 }
+          return (
+            <div
+              key={side}
+              data-anchor-item={dotsFor.id}
+              data-anchor-side={side}
+              title="Drag to connect"
+              className="wb-anchor pointer-events-auto absolute"
+              style={{ left: a.x + off.x - 7, top: a.y + off.y - 7 }}
+            />
+          )
+        })}
+      {highlight && (
+        <div
+          className="absolute rounded-[3px]"
+          style={{
+            ...rectStyle(toScreenRect(highlight, camera)),
+            outline: `2px solid ${SELECTION_COLOR}`,
+            outlineOffset: 2,
+          }}
+        />
+      )}
       {box && locked && (
         <div
           className="absolute flex items-center gap-1 rounded-md bg-white px-1.5 py-0.5 text-[11px] text-neutral-600 shadow"
@@ -111,9 +175,7 @@ export function SelectionOverlay() {
         <div
           className="absolute"
           style={{
-            ...(({ x, y, w, h }) => ({ left: x, top: y, width: w, height: h }))(
-              toScreenRect(marquee, camera),
-            ),
+            ...rectStyle(toScreenRect(marquee, camera)),
             background: 'rgb(59 108 255 / 0.08)',
             border: `1px solid ${SELECTION_COLOR}`,
           }}

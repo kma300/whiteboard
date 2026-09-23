@@ -33,6 +33,10 @@ const TOOL_KEYS: Record<string, Tool> = {
   n: 'sticky',
   t: 'text',
   s: 'shape',
+  l: 'connector',
+  p: 'pen',
+  e: 'eraser',
+  f: 'frame',
 }
 
 export function runCommand(cmd: Command): void {

@@ -543,17 +543,27 @@ export function pasteItems(source: Item[], center: Vec | null): string[] {
     center && b
       ? { x: center.x - (b.x + b.w / 2), y: center.y - (b.y + b.h / 2) }
       : { x: 24, y: 24 }
+  return placeClones(source, offset)
+}
+
+/**
+ * Copies of the selection shifted by `offset`, selected afterwards. Joins an open transaction,
+ * so Alt-drag (duplicate, then move) stays a single undo step.
+ */
+export function duplicateSelection(offset: Vec = { x: 24, y: 24 }): string[] {
+  const s = get()
+  return placeClones(collectForCopy(s.selection, s.items), offset)
+}
+
+function placeClones(source: Item[], offset: Vec): string[] {
+  if (!source.length) return []
   const clones = cloneItems(source, offset, nextZ())
+  const own = !tx
   beginTx()
   addItems(clones)
   refreshFrames(clones.map((c) => c.id))
-  commitTx()
+  if (own) commitTx()
   return clones.map((c) => c.id)
-}
-
-export function duplicateSelection(): string[] {
-  const s = get()
-  return pasteItems(collectForCopy(s.selection, s.items), null)
 }
 
 export function bringToFront(): void {

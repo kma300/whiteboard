@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react'
 import { Canvas } from '../canvas/Canvas'
+import { installClipboard } from '../canvas/clipboard'
 import { flushAutosave, startAutosave } from '../persist/autosave'
 import { getBoard } from '../persist/db'
 import { loadBoard, unloadBoard } from '../store/boardStore'
 import { installKeyboard } from '../store/commands'
+import { ContextToolbar } from './ContextToolbar'
 import { Toolbar } from './Toolbar'
 import { TopBar } from './TopBar'
 import { ZoomControls } from './ZoomControls'
@@ -34,7 +36,14 @@ export function BoardPage({ id }: { id: string }) {
     }
   }, [id])
 
-  useEffect(() => installKeyboard(), [])
+  useEffect(() => {
+    const removeKeyboard = installKeyboard()
+    const removeClipboard = installClipboard()
+    return () => {
+      removeKeyboard()
+      removeClipboard()
+    }
+  }, [])
 
   if (status === 'loading') {
     return <div className="grid h-full place-items-center text-sm text-neutral-500">Loading…</div>
@@ -56,6 +65,7 @@ export function BoardPage({ id }: { id: string }) {
       <Canvas />
       <TopBar />
       <Toolbar />
+      <ContextToolbar />
       <ZoomControls />
     </div>
   )
