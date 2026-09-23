@@ -305,20 +305,25 @@ function ConnectorView({ item }: { item: ConnectorItem }) {
         strokeLinecap="round"
         strokeLinejoin="round"
       />
+      {/* Arrowheads sit past the trimmed hit path, so they are hit targets themselves. */}
       {item.startArrow === 'arrow' && (
         <path
           d={arrowHeadPath(geom.start, geom.startDir, item.strokeWidth)}
+          data-item-id={item.id}
           fill={item.stroke}
           stroke={item.stroke}
           strokeLinejoin="round"
+          style={{ pointerEvents: 'visiblePainted' }}
         />
       )}
       {item.endArrow === 'arrow' && (
         <path
           d={arrowHeadPath(geom.end, geom.endDir, item.strokeWidth)}
+          data-item-id={item.id}
           fill={item.stroke}
           stroke={item.stroke}
           strokeLinejoin="round"
+          style={{ pointerEvents: 'visiblePainted' }}
         />
       )}
     </svg>
