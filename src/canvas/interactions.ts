@@ -59,7 +59,7 @@ const DRAG_THRESHOLD = 3
 const DOUBLE_CLICK_MS = 400
 const MIN_ITEM_SIZE = 8
 /** On-screen length of the arrow a click on a connection dot creates. */
-const QUICK_ARROW_PX = 140
+export const QUICK_ARROW_PX = 140
 const SIDES: Side[] = ['top', 'right', 'bottom', 'left']
 
 const HANDLE_CURSOR: Record<Handle, string> = {

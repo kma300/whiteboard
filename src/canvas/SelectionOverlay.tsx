@@ -1,12 +1,20 @@
 import { Lock } from 'lucide-react'
-import { connectorGeometry, itemBounds } from '../model/connectors'
-import { boxRect, sideAnchor, toScreenRect, unionRects, worldToScreen } from '../model/geometry'
+import { Fragment } from 'react'
+import { arrowHeadPath, connectorGeometry, itemBounds } from '../model/connectors'
+import {
+  boxRect,
+  sideAnchor,
+  sideNormal,
+  toScreenRect,
+  unionRects,
+  worldToScreen,
+} from '../model/geometry'
 import type { Handle } from '../model/geometry'
 import { SELECTION_COLOR } from '../model/palette'
 import { isBox } from '../model/types'
 import type { Item, Rect, Side } from '../model/types'
 import { useBoard } from '../store/boardStore'
-import { canConnect } from './interactions'
+import { QUICK_ARROW_PX, canConnect } from './interactions'
 
 const ALL: Handle[] = ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w']
 const CORNERS: Handle[] = ['nw', 'ne', 'se', 'sw']
@@ -142,15 +150,35 @@ export function SelectionOverlay() {
                 : side === 'left'
                   ? { x: -ANCHOR_GAP, y: 0 }
                   : { x: ANCHOR_GAP, y: 0 }
+          // Ghost of the arrow a click would create; CSS shows it while this dot is hovered.
+          const n = sideNormal(side)
+          const tip = { x: n.x * QUICK_ARROW_PX, y: n.y * QUICK_ARROW_PX }
           return (
-            <div
-              key={side}
-              data-anchor-item={dotsFor.id}
-              data-anchor-side={side}
-              title="Click for an arrow, or drag to connect"
-              className="wb-anchor pointer-events-auto absolute"
-              style={{ left: a.x + off.x - 7, top: a.y + off.y - 7 }}
-            />
+            <Fragment key={side}>
+              <div
+                data-anchor-item={dotsFor.id}
+                data-anchor-side={side}
+                title="Click for an arrow, or drag to connect"
+                className="wb-anchor pointer-events-auto absolute"
+                style={{ left: a.x + off.x - 7, top: a.y + off.y - 7 }}
+              />
+              <svg
+                aria-hidden
+                width={1}
+                height={1}
+                data-ghost-side={side}
+                className="wb-ghost absolute overflow-visible"
+                style={{ left: a.x, top: a.y }}
+              >
+                <path
+                  d={`M 0 0 L ${tip.x - n.x * 10} ${tip.y - n.y * 10}`}
+                  stroke={SELECTION_COLOR}
+                  strokeWidth={2}
+                  strokeLinecap="round"
+                />
+                <path d={arrowHeadPath(tip, n, 2)} fill={SELECTION_COLOR} />
+              </svg>
+            </Fragment>
           )
         })}
       {highlight && (
