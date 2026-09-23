@@ -27,6 +27,8 @@ import {
   useBoard,
   viewportCenterWorld,
 } from '../store/boardStore'
+import { displayKey, useShortcuts } from '../store/shortcuts'
+import type { ShortcutMap } from '../store/shortcuts'
 import { IconButton, Panel, Swatch, Tip } from './buttons'
 import type { TipSide } from './buttons'
 import { CONNECTOR_STYLES, SHAPES } from './options'
@@ -48,21 +50,20 @@ export function ShapeIcon({ kind, size = 18 }: { kind: ShapeKind; size?: number 
 interface ToolDef {
   tool: Tool
   label: string
-  shortcut?: string
   icon: LucideIcon | 'shape'
 }
 
 const TOOLS: ToolDef[] = [
-  { tool: 'select', label: 'Select', shortcut: 'V', icon: MousePointer2 },
-  { tool: 'hand', label: 'Hand', shortcut: 'H', icon: Hand },
-  { tool: 'sticky', label: 'Sticky note', shortcut: 'N', icon: StickyNote },
-  { tool: 'text', label: 'Text', shortcut: 'T', icon: Type },
-  { tool: 'shape', label: 'Shape', shortcut: 'S', icon: 'shape' },
-  { tool: 'connector', label: 'Connection line', shortcut: 'L', icon: Spline },
-  { tool: 'pen', label: 'Pen', shortcut: 'P', icon: Pen },
+  { tool: 'select', label: 'Select', icon: MousePointer2 },
+  { tool: 'hand', label: 'Hand', icon: Hand },
+  { tool: 'sticky', label: 'Sticky note', icon: StickyNote },
+  { tool: 'text', label: 'Text', icon: Type },
+  { tool: 'shape', label: 'Shape', icon: 'shape' },
+  { tool: 'connector', label: 'Connection line', icon: Spline },
+  { tool: 'pen', label: 'Pen', icon: Pen },
   { tool: 'highlighter', label: 'Highlighter', icon: Highlighter },
-  { tool: 'eraser', label: 'Eraser', shortcut: 'E', icon: Eraser },
-  { tool: 'frame', label: 'Frame', shortcut: 'F', icon: Frame },
+  { tool: 'eraser', label: 'Eraser', icon: Eraser },
+  { tool: 'frame', label: 'Frame', icon: Frame },
 ]
 
 export function OptionButton({
@@ -99,8 +100,13 @@ export function OptionButton({
   )
 }
 
+/** Shortcut shown for a shape kind: its own key, if the user gave it one. */
+const shapeKey = (map: ShortcutMap, kind: ShapeKind) =>
+  displayKey(kind === 'rect' ? map.rect : kind === 'ellipse' ? map.ellipse : null) ?? undefined
+
 function ToolOptions({ tool }: { tool: Tool }) {
   const opts = useBoard((s) => s.toolOptions)
+  const keys = useShortcuts((s) => s.map)
   switch (tool) {
     case 'sticky':
       return (
@@ -123,7 +129,7 @@ function ToolOptions({ tool }: { tool: Tool }) {
             <OptionButton
               key={s.kind}
               label={s.label}
-              shortcut={s.shortcut}
+              shortcut={shapeKey(keys, s.kind)}
               active={opts.shape === s.kind}
               onClick={() => setToolOptions({ shape: s.kind })}
             >
@@ -206,9 +212,10 @@ export function Toolbar() {
   const canRedo = useBoard((s) => s.redoStack.length > 0)
   const fileInput = useRef<HTMLInputElement>(null)
   const shapeKind = useBoard((s) => s.toolOptions.shape)
-  const shapeTip = SHAPES.find((s) => s.kind === shapeKind && s.shortcut) ?? {
-    label: 'Shape',
-    shortcut: 'S',
+  const keys = useShortcuts((s) => s.map)
+  const shapeTip = {
+    label: SHAPES.find((s) => s.kind === shapeKind)?.label ?? 'Shape',
+    shortcut: shapeKey(keys, shapeKind) ?? displayKey(keys.shape) ?? undefined,
   }
 
   return (
@@ -232,7 +239,7 @@ export function Toolbar() {
               key={t.tool}
               icon={t.icon}
               label={t.label}
-              shortcut={t.shortcut}
+              shortcut={displayKey(keys[t.tool]) ?? undefined}
               tipSide="right"
               active={tool === t.tool}
               testId={`tool-${t.tool}`}
@@ -243,6 +250,7 @@ export function Toolbar() {
         <IconButton
           icon={Image}
           label="Upload image"
+          shortcut={displayKey(keys.image) ?? undefined}
           tipSide="right"
           testId="tool-image"
           onClick={() => fileInput.current?.click()}
@@ -272,6 +280,7 @@ export function Toolbar() {
         accept="image/*"
         multiple
         hidden
+        id="wb-image-input"
         data-testid="image-input"
         onChange={(e) => {
           const files = [...(e.target.files ?? [])]

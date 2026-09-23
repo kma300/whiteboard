@@ -1,5 +1,6 @@
-import type { ShapeKind, Tool } from '../model/types'
 import * as B from './boardStore'
+import { actionForKey } from './shortcuts'
+import type { ShortcutAction } from './shortcuts'
 
 export type Command =
   | 'undo'
@@ -27,16 +28,18 @@ export const inElectron =
   typeof location !== 'undefined' &&
   new URLSearchParams(location.search).get('shell') === 'electron'
 
-const TOOL_KEYS: Record<string, Tool> = {
-  v: 'select',
-  h: 'hand',
-  n: 'sticky',
-  t: 'text',
-  s: 'shape',
-  l: 'connector',
-  p: 'pen',
-  e: 'eraser',
-  f: 'frame',
+/** Runs a user-configurable toolbar shortcut. */
+function runShortcut(action: ShortcutAction): void {
+  if (action === 'rect' || action === 'ellipse') {
+    B.setToolOptions({ shape: action === 'rect' ? 'rect' : 'ellipse' })
+    B.setTool('shape')
+    return
+  }
+  if (action === 'image') {
+    document.getElementById('wb-image-input')?.click()
+    return
+  }
+  B.setTool(action)
 }
 
 export function runCommand(cmd: Command): void {
@@ -118,9 +121,6 @@ function commandForKey(e: KeyboardEvent): Command | null {
   return null
 }
 
-/** Keys that pick the shape tool with a specific shape. */
-const SHAPE_KEYS: Record<string, ShapeKind> = { r: 'rect', o: 'ellipse' }
-
 const NUDGE: Record<string, [number, number]> = {
   arrowleft: [-1, 0],
   arrowright: [1, 0],
@@ -148,17 +148,10 @@ export function installKeyboard(): () => void {
       B.nudgeSelection(nudge[0] * step, nudge[1] * step)
       return
     }
-    const shape = SHAPE_KEYS[key]
-    if (shape && !e.shiftKey) {
+    const action = actionForKey(e.key)
+    if (action && !e.shiftKey) {
       e.preventDefault()
-      B.setToolOptions({ shape })
-      B.setTool('shape')
-      return
-    }
-    const tool = TOOL_KEYS[key]
-    if (tool && !e.shiftKey) {
-      e.preventDefault()
-      B.setTool(tool)
+      runShortcut(action)
     }
   }
 

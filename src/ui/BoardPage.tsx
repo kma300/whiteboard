@@ -1,5 +1,5 @@
-import { Download, Map as MapIcon } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { Download, Keyboard, Map as MapIcon } from 'lucide-react'
+import { useCallback, useEffect, useState } from 'react'
 import { Canvas } from '../canvas/Canvas'
 import { installClipboard } from '../canvas/clipboard'
 import { flushAutosave, startAutosave } from '../persist/autosave'
@@ -10,6 +10,7 @@ import { IconButton } from './buttons'
 import { ContextToolbar } from './ContextToolbar'
 import { downloadBoardJson } from './exportBoard'
 import { Minimap } from './Minimap'
+import { ShortcutsDialog } from './ShortcutsDialog'
 import { Toolbar } from './Toolbar'
 import { TopBar } from './TopBar'
 import { ZoomControls } from './ZoomControls'
@@ -32,6 +33,8 @@ function EmptyHint() {
 function BoardView() {
   const name = useBoard((s) => s.name)
   const [showMinimap, setShowMinimap] = useState(true)
+  const [showShortcuts, setShowShortcuts] = useState(false)
+  const closeShortcuts = useCallback(() => setShowShortcuts(false), [])
 
   useEffect(() => {
     if (name) document.title = `${name} · Whiteboard`
@@ -49,6 +52,12 @@ function BoardView() {
           testId="export-board"
           onClick={downloadBoardJson}
         />
+        <IconButton
+          icon={Keyboard}
+          label="Keyboard shortcuts"
+          testId="open-shortcuts"
+          onClick={() => setShowShortcuts(true)}
+        />
       </TopBar>
       <Toolbar />
       <ContextToolbar />
@@ -63,6 +72,7 @@ function BoardView() {
         />
         <div className="mx-0.5 h-5 w-px bg-neutral-200" />
       </ZoomControls>
+      {showShortcuts && <ShortcutsDialog onClose={closeShortcuts} />}
     </div>
   )
 }

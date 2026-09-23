@@ -33,6 +33,9 @@ The app is installed at `/Applications/Whiteboard.app`. After changing the code,
 
 ## Shortcuts
 
+Tool keys are editable: click the keyboard button in the top bar, pick a tool, press a key.
+The defaults:
+
 | Key                   | Action                                                           |
 | --------------------- | ---------------------------------------------------------------- |
 | V H N T S L P E F     | Select, Hand, Sticky, Text, Shape, Connector, Pen, Eraser, Frame |
