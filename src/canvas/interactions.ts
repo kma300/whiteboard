@@ -393,14 +393,20 @@ export function createInteractions(el: HTMLElement): () => void {
   }
 
   /**
-   * Draws a connector from `from`. Dropping it on an item attaches it. Dropping a line pulled from
-   * a sticky or shape onto empty canvas creates a matching item there, like Miro does.
+   * Draws a connector from `from`. Dropping it on another item attaches it; releasing it back on
+   * the item it starts from cancels. A line pulled from a connection dot (`fromDot`) onto empty
+   * canvas creates a matching item there, like Miro does.
    */
-  function connectGesture(start: Pointer, from: ConnectorEnd, sourceId: string | null): Gesture {
+  function connectGesture(start: Pointer, from: ConnectorEnd, fromDot: boolean): Gesture {
     const style = state().toolOptions.connectorStyle
+    const sourceId = from.kind === 'item' ? from.itemId : null
     let dragged = false
     // Where the line comes from, so a drop near an item's middle attaches to the facing side.
     const facing = (p: Pointer) => resolveEnd(from, state().items)?.point ?? p.world
+    const overSource = (p: Pointer) => {
+      const source = sourceId ? state().items[sourceId] : undefined
+      return !!source && isBox(source) && rectContains(boxRect(source), p.world)
+    }
     const endFor = (p: Pointer) => {
       const target = connectTargetAt(p, sourceId)
       const end: ConnectorEnd = target
@@ -413,22 +419,27 @@ export function createInteractions(el: HTMLElement): () => void {
       move(p) {
         if (!dragged && distance(p.screen, start.screen) < DRAG_THRESHOLD) return
         dragged = true
-        B.setDraftConnector({ start: from, style, ...endFor(p) })
+        const next = endFor(p)
+        // Over its own item the line would connect the item to itself, so show nothing.
+        const cancels = !next.targetId && overSource(p)
+        B.setDraftConnector(cancels ? null : { start: from, style, ...next })
       },
       up(p) {
         B.setDraftConnector(null)
         if (!dragged) {
           // A plain click on a connection dot makes a standard straight arrow.
-          if (sourceId && from.kind === 'item') quickArrow(from)
+          if (fromDot && from.kind === 'item') quickArrow(from)
           return
         }
         let { end } = endFor(p)
+        if (end.kind === 'point' && overSource(p)) return
         const s = state()
         const source = sourceId ? s.items[sourceId] : undefined
         B.beginTx()
         let spawned: BoxItem | null = null
         if (
           end.kind === 'point' &&
+          fromDot &&
           source &&
           isBox(source) &&
           distance(p.screen, start.screen) > 40
@@ -546,7 +557,7 @@ export function createInteractions(el: HTMLElement): () => void {
     if (handle && handle in HANDLE_CURSOR) return resizeGesture(handle as Handle, p)
 
     const anchor = anchorAt(target)
-    if (anchor) return connectGesture(p, { kind: 'item', ...anchor }, anchor.itemId)
+    if (anchor) return connectGesture(p, { kind: 'item', ...anchor }, true)
 
     const titleId = target.closest('[data-frame-title]')?.getAttribute('data-frame-title')
     if (titleId && s.items[titleId]) {
@@ -586,7 +597,7 @@ export function createInteractions(el: HTMLElement): () => void {
 
   function connectorToolGesture(target: Element, p: Pointer): Gesture {
     const anchor = anchorAt(target)
-    if (anchor) return connectGesture(p, { kind: 'item', ...anchor }, anchor.itemId)
+    if (anchor) return connectGesture(p, { kind: 'item', ...anchor }, true)
     const id = target.closest('[data-item-id]')?.getAttribute('data-item-id')
     const item = id ? state().items[id] : undefined
     if (canConnect(item)) {
@@ -595,9 +606,9 @@ export function createInteractions(el: HTMLElement): () => void {
         itemId: item.id,
         side: nearestSide(boxRect(item), p.world),
       }
-      return connectGesture(p, from, null)
+      return connectGesture(p, from, false)
     }
-    return connectGesture(p, { kind: 'point', x: p.world.x, y: p.world.y }, null)
+    return connectGesture(p, { kind: 'point', x: p.world.x, y: p.world.y }, false)
   }
 
   function startGesture(e: PointerEvent, target: Element, p: Pointer): Gesture | null {
