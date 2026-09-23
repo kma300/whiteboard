@@ -2,7 +2,7 @@ import { LayoutGrid } from 'lucide-react'
 import { useState } from 'react'
 import type { ReactNode } from 'react'
 import { renameBoard, useBoard } from '../store/boardStore'
-import { Panel } from './buttons'
+import { Panel, Tip } from './buttons'
 
 export function TopBar({ children }: { children?: ReactNode }) {
   const name = useBoard((s) => s.name)
@@ -17,11 +17,11 @@ export function TopBar({ children }: { children?: ReactNode }) {
     <Panel className="fixed left-3 top-3 z-20 flex h-11 items-center gap-1 px-1">
       <a
         href="#/"
-        title="All boards"
         aria-label="All boards"
-        className="grid h-9 w-9 place-items-center rounded-lg text-neutral-700 hover:bg-neutral-100"
+        className="group relative grid h-9 w-9 place-items-center rounded-lg text-neutral-700 hover:bg-neutral-100"
       >
         <LayoutGrid size={18} strokeWidth={1.9} />
+        <Tip label="All boards" />
       </a>
       <div className="h-5 w-px bg-neutral-200" />
       {editing ? (

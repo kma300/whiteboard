@@ -45,7 +45,7 @@ function BoardView() {
         <div className="h-5 w-px bg-neutral-200" />
         <IconButton
           icon={Download}
-          label="Export board (.json)"
+          label="Export board as JSON"
           testId="export-board"
           onClick={downloadBoardJson}
         />
@@ -57,6 +57,7 @@ function BoardView() {
         <IconButton
           icon={MapIcon}
           label={showMinimap ? 'Hide minimap' : 'Show minimap'}
+          tipSide="top"
           active={showMinimap}
           onClick={() => setShowMinimap((v) => !v)}
         />

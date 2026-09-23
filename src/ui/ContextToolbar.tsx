@@ -29,7 +29,7 @@ import {
 import type { Item, Rect, TextAlign } from '../model/types'
 import { updateSelection, useBoard } from '../store/boardStore'
 import { runCommand } from '../store/commands'
-import { IconButton, Swatch } from './buttons'
+import { IconButton, Swatch, Tip } from './buttons'
 import { CONNECTOR_STYLES, SHAPES } from './options'
 import { OptionButton, ShapeIcon } from './Toolbar'
 
@@ -66,10 +66,9 @@ function ColorMenu({
     <div className="relative">
       <button
         type="button"
-        title={label}
         aria-label={label}
         onClick={() => setOpen(open === id ? null : id)}
-        className="grid h-9 w-9 place-items-center rounded-lg hover:bg-neutral-100"
+        className="group relative grid h-9 w-9 place-items-center rounded-lg hover:bg-neutral-100"
       >
         <span
           className="block h-5 w-5 rounded-full"
@@ -85,6 +84,7 @@ function ColorMenu({
                 }
           }
         />
+        <Tip label={label} side="top" />
       </button>
       {open === id && (
         <Popover>
@@ -257,6 +257,7 @@ function ContextToolbarBody() {
           <div className="relative">
             <OptionButton
               label="Shape"
+              tipSide="top"
               active={open === 'shape'}
               onClick={() => setOpenState(open === 'shape' ? null : 'shape')}
             >
@@ -311,6 +312,7 @@ function ContextToolbarBody() {
             />
           )}
           <IconButton
+            tipSide="top"
             icon={Bold}
             label="Bold"
             active={textual.every((it) => it.bold)}
@@ -324,6 +326,7 @@ function ContextToolbarBody() {
             }}
           />
           <IconButton
+            tipSide="top"
             icon={AlignIcon}
             label="Text alignment"
             onClick={() => {
@@ -343,6 +346,7 @@ function ContextToolbarBody() {
         <>
           {CONNECTOR_STYLES.map(({ style, label, icon }) => (
             <IconButton
+              tipSide="top"
               key={style}
               icon={icon}
               label={label}
@@ -351,6 +355,7 @@ function ContextToolbarBody() {
             />
           ))}
           <IconButton
+            tipSide="top"
             icon={MoveLeft}
             label="Start arrow"
             active={connectors.every((c) => c.startArrow === 'arrow')}
@@ -360,6 +365,7 @@ function ContextToolbarBody() {
             }}
           />
           <IconButton
+            tipSide="top"
             icon={MoveRight}
             label="End arrow"
             active={connectors.every((c) => c.endArrow === 'arrow')}
@@ -384,35 +390,57 @@ function ContextToolbarBody() {
 
       <Divider />
       {selected.length > 1 && !grouped && (
-        <IconButton icon={Group} label="Group (⌘G)" onClick={() => runCommand('group')} />
+        <IconButton
+          tipSide="top"
+          icon={Group}
+          label="Group"
+          shortcut="⌘G"
+          onClick={() => runCommand('group')}
+        />
       )}
       {grouped && (
-        <IconButton icon={Ungroup} label="Ungroup (⇧⌘G)" onClick={() => runCommand('ungroup')} />
+        <IconButton
+          tipSide="top"
+          icon={Ungroup}
+          label="Ungroup"
+          shortcut="⇧⌘G"
+          onClick={() => runCommand('ungroup')}
+        />
       )}
       <IconButton
+        tipSide="top"
         icon={BringToFront}
-        label="Bring to front (⌘])"
+        label="Bring to front"
+        shortcut="⌘]"
         onClick={() => runCommand('bringToFront')}
       />
       <IconButton
+        tipSide="top"
         icon={SendToBack}
-        label="Send to back (⌘[)"
+        label="Send to back"
+        shortcut="⌘["
         onClick={() => runCommand('sendToBack')}
       />
       <IconButton
+        tipSide="top"
         icon={allLocked ? LockOpen : Lock}
-        label={allLocked ? 'Unlock (⇧⌘L)' : 'Lock (⇧⌘L)'}
+        label={allLocked ? 'Unlock' : 'Lock'}
+        shortcut="⇧⌘L"
         onClick={() => runCommand('toggleLock')}
       />
       <IconButton
+        tipSide="top"
         icon={Copy}
-        label="Duplicate (⌘D)"
+        label="Duplicate"
+        shortcut="⌘D"
         testId="ctx-duplicate"
         onClick={() => runCommand('duplicate')}
       />
       <IconButton
+        tipSide="top"
         icon={Trash}
-        label="Delete (⌫)"
+        label="Delete"
+        shortcut="⌫"
         testId="ctx-delete"
         disabled={allLocked}
         onClick={() => runCommand('delete')}

@@ -1,4 +1,4 @@
-import type { Tool } from '../model/types'
+import type { ShapeKind, Tool } from '../model/types'
 import * as B from './boardStore'
 
 export type Command =
@@ -118,6 +118,9 @@ function commandForKey(e: KeyboardEvent): Command | null {
   return null
 }
 
+/** Keys that pick the shape tool with a specific shape. */
+const SHAPE_KEYS: Record<string, ShapeKind> = { r: 'rect', o: 'ellipse' }
+
 const NUDGE: Record<string, [number, number]> = {
   arrowleft: [-1, 0],
   arrowright: [1, 0],
@@ -143,6 +146,13 @@ export function installKeyboard(): () => void {
       e.preventDefault()
       const step = e.shiftKey ? 10 : 1
       B.nudgeSelection(nudge[0] * step, nudge[1] * step)
+      return
+    }
+    const shape = SHAPE_KEYS[key]
+    if (shape && !e.shiftKey) {
+      e.preventDefault()
+      B.setToolOptions({ shape })
+      B.setTool('shape')
       return
     }
     const tool = TOOL_KEYS[key]

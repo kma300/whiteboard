@@ -2,10 +2,10 @@ import { CornerDownRight, Slash, Spline } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import type { ConnectorStyle, ShapeKind } from '../model/types'
 
-export const SHAPES: { kind: ShapeKind; label: string }[] = [
-  { kind: 'rect', label: 'Rectangle' },
+export const SHAPES: { kind: ShapeKind; label: string; shortcut?: string }[] = [
+  { kind: 'rect', label: 'Rectangle', shortcut: 'R' },
   { kind: 'roundRect', label: 'Rounded rectangle' },
-  { kind: 'ellipse', label: 'Ellipse' },
+  { kind: 'ellipse', label: 'Ellipse', shortcut: 'O' },
   { kind: 'triangle', label: 'Triangle' },
   { kind: 'diamond', label: 'Diamond' },
   { kind: 'star', label: 'Star' },

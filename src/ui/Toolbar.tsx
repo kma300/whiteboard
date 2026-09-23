@@ -27,7 +27,8 @@ import {
   useBoard,
   viewportCenterWorld,
 } from '../store/boardStore'
-import { IconButton, Panel, Swatch } from './buttons'
+import { IconButton, Panel, Swatch, Tip } from './buttons'
+import type { TipSide } from './buttons'
 import { CONNECTOR_STYLES, SHAPES } from './options'
 
 export function ShapeIcon({ kind, size = 18 }: { kind: ShapeKind; size?: number }) {
@@ -47,20 +48,21 @@ export function ShapeIcon({ kind, size = 18 }: { kind: ShapeKind; size?: number 
 interface ToolDef {
   tool: Tool
   label: string
+  shortcut?: string
   icon: LucideIcon | 'shape'
 }
 
 const TOOLS: ToolDef[] = [
-  { tool: 'select', label: 'Select (V)', icon: MousePointer2 },
-  { tool: 'hand', label: 'Hand (H)', icon: Hand },
-  { tool: 'sticky', label: 'Sticky note (N)', icon: StickyNote },
-  { tool: 'text', label: 'Text (T)', icon: Type },
-  { tool: 'shape', label: 'Shape (S)', icon: 'shape' },
-  { tool: 'connector', label: 'Connection line (L)', icon: Spline },
-  { tool: 'pen', label: 'Pen (P)', icon: Pen },
+  { tool: 'select', label: 'Select', shortcut: 'V', icon: MousePointer2 },
+  { tool: 'hand', label: 'Hand', shortcut: 'H', icon: Hand },
+  { tool: 'sticky', label: 'Sticky note', shortcut: 'N', icon: StickyNote },
+  { tool: 'text', label: 'Text', shortcut: 'T', icon: Type },
+  { tool: 'shape', label: 'Shape', shortcut: 'S', icon: 'shape' },
+  { tool: 'connector', label: 'Connection line', shortcut: 'L', icon: Spline },
+  { tool: 'pen', label: 'Pen', shortcut: 'P', icon: Pen },
   { tool: 'highlighter', label: 'Highlighter', icon: Highlighter },
-  { tool: 'eraser', label: 'Eraser (E)', icon: Eraser },
-  { tool: 'frame', label: 'Frame (F)', icon: Frame },
+  { tool: 'eraser', label: 'Eraser', shortcut: 'E', icon: Eraser },
+  { tool: 'frame', label: 'Frame', shortcut: 'F', icon: Frame },
 ]
 
 export function OptionButton({
@@ -68,27 +70,31 @@ export function OptionButton({
   label,
   onClick,
   children,
+  shortcut,
+  tipSide,
   testId,
 }: {
   active: boolean
   label: string
   onClick: () => void
   children: ReactNode
+  shortcut?: string
+  tipSide?: TipSide
   testId?: string
 }) {
   return (
     <button
       type="button"
-      title={label}
       aria-label={label}
       aria-pressed={active}
       data-testid={testId}
       onClick={onClick}
-      className={`grid h-9 w-9 place-items-center rounded-lg ${
+      className={`group relative grid h-9 w-9 place-items-center rounded-lg ${
         active ? 'bg-[#EAEFFF] text-[#3B6CFF]' : 'text-neutral-700 hover:bg-neutral-100'
       }`}
     >
       {children}
+      <Tip label={label} shortcut={shortcut} side={tipSide} />
     </button>
   )
 }
@@ -117,6 +123,7 @@ function ToolOptions({ tool }: { tool: Tool }) {
             <OptionButton
               key={s.kind}
               label={s.label}
+              shortcut={s.shortcut}
               active={opts.shape === s.kind}
               onClick={() => setToolOptions({ shape: s.kind })}
             >
@@ -198,6 +205,11 @@ export function Toolbar() {
   const canUndo = useBoard((s) => s.undoStack.length > 0)
   const canRedo = useBoard((s) => s.redoStack.length > 0)
   const fileInput = useRef<HTMLInputElement>(null)
+  const shapeKind = useBoard((s) => s.toolOptions.shape)
+  const shapeTip = SHAPES.find((s) => s.kind === shapeKind && s.shortcut) ?? {
+    label: 'Shape',
+    shortcut: 'S',
+  }
 
   return (
     <div className="fixed left-3 top-1/2 z-20 flex -translate-y-1/2 items-start gap-2">
@@ -206,7 +218,9 @@ export function Toolbar() {
           t.icon === 'shape' ? (
             <OptionButton
               key={t.tool}
-              label={t.label}
+              label={shapeTip.label}
+              shortcut={shapeTip.shortcut}
+              tipSide="right"
               active={tool === t.tool}
               testId={`tool-${t.tool}`}
               onClick={() => setTool(t.tool)}
@@ -218,6 +232,8 @@ export function Toolbar() {
               key={t.tool}
               icon={t.icon}
               label={t.label}
+              shortcut={t.shortcut}
+              tipSide="right"
               active={tool === t.tool}
               testId={`tool-${t.tool}`}
               onClick={() => setTool(t.tool)}
@@ -227,12 +243,27 @@ export function Toolbar() {
         <IconButton
           icon={Image}
           label="Upload image"
+          tipSide="right"
           testId="tool-image"
           onClick={() => fileInput.current?.click()}
         />
         <div className="mx-1.5 my-1 h-px bg-neutral-200" />
-        <IconButton icon={Undo2} label="Undo (⌘Z)" disabled={!canUndo} onClick={undo} />
-        <IconButton icon={Redo2} label="Redo (⇧⌘Z)" disabled={!canRedo} onClick={redo} />
+        <IconButton
+          icon={Undo2}
+          label="Undo"
+          shortcut="⌘Z"
+          tipSide="right"
+          disabled={!canUndo}
+          onClick={undo}
+        />
+        <IconButton
+          icon={Redo2}
+          label="Redo"
+          shortcut="⇧⌘Z"
+          tipSide="right"
+          disabled={!canRedo}
+          onClick={redo}
+        />
       </Panel>
       <ToolOptions tool={tool} />
       <input
