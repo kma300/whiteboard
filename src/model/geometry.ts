@@ -127,6 +127,24 @@ export function sideNormal(side: Side): Vec {
   }
 }
 
+const OPPOSITE: Record<Side, Side> = { top: 'bottom', right: 'left', bottom: 'top', left: 'right' }
+
+export const oppositeSide = (side: Side): Side => OPPOSITE[side]
+
+/** Box of size `w` x `h` whose `side` has its midpoint on `p`. */
+export function rectWithSideAt(p: Vec, side: Side, w: number, h: number): Rect {
+  switch (side) {
+    case 'top':
+      return { x: p.x - w / 2, y: p.y, w, h }
+    case 'right':
+      return { x: p.x - w, y: p.y - h / 2, w, h }
+    case 'bottom':
+      return { x: p.x - w / 2, y: p.y - h, w, h }
+    case 'left':
+      return { x: p.x, y: p.y - h / 2, w, h }
+  }
+}
+
 /** Side of `r` that faces `p`, judged relative to the rect's proportions. */
 export function nearestSide(r: Rect, p: Vec): Side {
   const c = rectCenter(r)

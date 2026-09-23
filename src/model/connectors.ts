@@ -2,17 +2,22 @@ import {
   add,
   boundsOfPoints,
   boxRect,
+  clamp,
   distance,
+  expandRect,
   fmt,
   mul,
   nearestSide,
   normalize,
+  oppositeSide,
   rectCenter,
+  rectsIntersect,
+  rectWithSideAt,
   sideAnchor,
   sideNormal,
   sub,
 } from './geometry'
-import type { ConnectorEnd, ConnectorItem, Item, Items, Rect, Side, Vec } from './types'
+import type { BoxItem, ConnectorEnd, ConnectorItem, Item, Items, Rect, Side, Vec } from './types'
 
 export interface ResolvedEnd {
   point: Vec
@@ -428,4 +433,62 @@ export function connectorsAttachedTo(ids: Set<string>, items: Items): string[] {
     if (s || e) out.push(item.id)
   }
   return out
+}
+
+export interface CopyPlacement {
+  /** Box of the new copy. */
+  rect: Rect
+  /** Side of the copy the connector attaches to, facing back at the source. */
+  side: Side
+}
+
+/** Items a new copy must not land on. Frames hold items and strokes are ink, so neither counts. */
+const blocksCopy = (it: Item): it is BoxItem =>
+  it.type === 'sticky' || it.type === 'shape' || it.type === 'text' || it.type === 'image'
+
+/**
+ * Where a click on the `side` connection dot of `source` puts a linked copy: beside that side, a
+ * gap of half the source's size away (60 to 200). When something already sits there, the copy
+ * fans out sideways (after, then before), then moves further out.
+ */
+export function linkedCopyPlacement(source: BoxItem, side: Side, items: Items): CopyPlacement {
+  const n = sideNormal(side)
+  const horizontal = n.x !== 0
+  const along = horizontal ? source.w : source.h
+  const across = horizontal ? source.h : source.w
+  const gap = clamp(along / 2, 60, 200)
+  const back = oppositeSide(side)
+  const blockers = Object.values(items).filter(blocksCopy).map(boxRect)
+  const at = (ring: number, fan: number): Rect => {
+    const out = along + gap + ring * (along + gap)
+    const sideways = fan * (across + gap)
+    return {
+      x: source.x + n.x * out + (horizontal ? 0 : sideways),
+      y: source.y + n.y * out + (horizontal ? sideways : 0),
+      w: source.w,
+      h: source.h,
+    }
+  }
+  for (let ring = 0; ring < 3; ring++) {
+    for (const fan of [0, 1, -1, 2, -2]) {
+      const rect = at(ring, fan)
+      const zone = expandRect(rect, gap / 2)
+      if (!blockers.some((b) => rectsIntersect(zone, b))) return { rect, side: back }
+    }
+  }
+  return { rect: at(0, 0), side: back }
+}
+
+/**
+ * Where a line pulled from `from` and released at `at` puts a copy of `source`: the copy's side
+ * that faces back along the line has its midpoint on `at`. Null when the copy would overlap the
+ * source.
+ */
+export function droppedCopyPlacement(source: BoxItem, from: Vec, at: Vec): CopyPlacement | null {
+  const dx = (at.x - from.x) / Math.max(source.w, 1)
+  const dy = (at.y - from.y) / Math.max(source.h, 1)
+  const side: Side =
+    Math.abs(dx) >= Math.abs(dy) ? (dx > 0 ? 'left' : 'right') : dy > 0 ? 'top' : 'bottom'
+  const rect = rectWithSideAt(at, side, source.w, source.h)
+  return rectsIntersect(rect, boxRect(source)) ? null : { rect, side }
 }

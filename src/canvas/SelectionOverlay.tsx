@@ -1,18 +1,27 @@
 import { Lock } from 'lucide-react'
-import { Fragment } from 'react'
-import { arrowHeadPath, connectorGeometry, itemBounds } from '../model/connectors'
+import {
+  arrowHeadPath,
+  connectorGeometry,
+  itemBounds,
+  linkedCopyPlacement,
+} from '../model/connectors'
 import {
   boxRect,
+  fmt,
+  mul,
+  normalize,
   sideAnchor,
   sideNormal,
+  sub,
   toScreenRect,
   unionRects,
   worldToScreen,
 } from '../model/geometry'
 import type { Handle } from '../model/geometry'
 import { SELECTION_COLOR } from '../model/palette'
-import { isBox } from '../model/types'
-import type { Item, Rect, Side } from '../model/types'
+import { shapePath } from '../model/shapes'
+import { isBox, isTextual } from '../model/types'
+import type { BoxItem, Camera, Item, Items, Rect, Side, TextualItem } from '../model/types'
 import { useBoard } from '../store/boardStore'
 import { QUICK_ARROW_PX, canConnect } from './interactions'
 
@@ -52,6 +61,80 @@ function handlesFor(selected: Item[]): Handle[] {
 
 const rectStyle = (r: Rect) => ({ left: r.x, top: r.y, width: r.w, height: r.h })
 
+interface GhostProps {
+  item: BoxItem
+  side: Side
+  items: Items
+  camera: Camera
+}
+
+/** Faded preview of what a click on the hovered connection dot creates, where it will land. */
+function DotGhost({ item, side, items, camera }: GhostProps) {
+  const from = worldToScreen(sideAnchor(boxRect(item), side), camera)
+  const copy = isTextual(item) ? { item, ...linkedCopyPlacement(item, side, items) } : null
+  const n = sideNormal(side)
+  const to = copy
+    ? worldToScreen(sideAnchor(copy.rect, copy.side), camera)
+    : { x: from.x + n.x * QUICK_ARROW_PX, y: from.y + n.y * QUICK_ARROW_PX }
+  const dir = normalize(sub(to, from))
+  return (
+    <>
+      {copy && (
+        <GhostBody item={copy.item} r={toScreenRect(copy.rect, camera)} zoom={camera.zoom} />
+      )}
+      <svg
+        aria-hidden
+        width={1}
+        height={1}
+        className="wb-ghost absolute left-0 top-0 overflow-visible"
+      >
+        <path
+          d={`M ${fmt(from)} L ${fmt(sub(to, mul(dir, 10)))}`}
+          stroke={SELECTION_COLOR}
+          strokeWidth={2}
+          strokeLinecap="round"
+        />
+        <path d={arrowHeadPath(to, dir, 2)} fill={SELECTION_COLOR} />
+      </svg>
+    </>
+  )
+}
+
+function GhostBody({ item, r, zoom }: { item: TextualItem; r: Rect; zoom: number }) {
+  if (item.type === 'shape') {
+    const strokeWidth = item.strokeWidth * zoom
+    return (
+      <svg
+        aria-hidden
+        width={r.w}
+        height={r.h}
+        className="wb-ghost absolute overflow-visible"
+        style={{ left: r.x, top: r.y }}
+      >
+        <path
+          d={shapePath(item.shape, 0, 0, r.w, r.h, strokeWidth / 2)}
+          fill={item.fill === 'transparent' ? 'none' : item.fill}
+          stroke={item.strokeWidth > 0 ? item.stroke : 'none'}
+          strokeWidth={strokeWidth}
+          strokeLinejoin="round"
+        />
+      </svg>
+    )
+  }
+  // Stickies show their color; a text box has no body, so it shows a dashed outline.
+  return (
+    <div
+      aria-hidden
+      className="wb-ghost absolute rounded-[2px]"
+      style={{
+        ...rectStyle(r),
+        background: item.type === 'sticky' ? item.fill : undefined,
+        outline: item.type === 'text' ? `1.5px dashed ${SELECTION_COLOR}` : undefined,
+      }}
+    />
+  )
+}
+
 export function SelectionOverlay() {
   const selection = useBoard((s) => s.selection)
   const items = useBoard((s) => s.items)
@@ -60,6 +143,7 @@ export function SelectionOverlay() {
   const editingId = useBoard((s) => s.editingId)
   const marquee = useBoard((s) => s.marquee)
   const hoverId = useBoard((s) => s.hoverId)
+  const hoverSide = useBoard((s) => s.hoverSide)
   const tool = useBoard((s) => s.tool)
   const snapTarget = useBoard((s) => s.draftConnector?.targetId ?? null)
 
@@ -87,6 +171,11 @@ export function SelectionOverlay() {
     !dotsFor.locked &&
     (!interacting || hoverId === dotsFor.id)
   const dotRect = showDots ? toScreenRect(boxRect(dotsFor), camera) : null
+  // The hovered dot previews what a click on it creates.
+  const ghost =
+    dotRect && canConnect(dotsFor) && hoverId === dotsFor.id && hoverSide
+      ? { item: dotsFor, side: hoverSide }
+      : null
 
   const highlightId = snapTarget ?? (interacting ? hoverId : null)
   const highlight = highlightId && items[highlightId] ? itemBounds(items[highlightId], items) : null
@@ -138,47 +227,25 @@ export function SelectionOverlay() {
             />
           )
         })}
+      {ghost && <DotGhost item={ghost.item} side={ghost.side} items={items} camera={camera} />}
       {dotRect &&
         dotsFor &&
         SIDES.map((side) => {
           const a = sideAnchor(dotRect, side)
-          const off =
-            side === 'top'
-              ? { x: 0, y: -ANCHOR_GAP }
-              : side === 'bottom'
-                ? { x: 0, y: ANCHOR_GAP }
-                : side === 'left'
-                  ? { x: -ANCHOR_GAP, y: 0 }
-                  : { x: ANCHOR_GAP, y: 0 }
-          // Ghost of the arrow a click would create; CSS shows it while this dot is hovered.
           const n = sideNormal(side)
-          const tip = { x: n.x * QUICK_ARROW_PX, y: n.y * QUICK_ARROW_PX }
           return (
-            <Fragment key={side}>
-              <div
-                data-anchor-item={dotsFor.id}
-                data-anchor-side={side}
-                title="Click for an arrow, or drag to connect"
-                className="wb-anchor pointer-events-auto absolute"
-                style={{ left: a.x + off.x - 7, top: a.y + off.y - 7 }}
-              />
-              <svg
-                aria-hidden
-                width={1}
-                height={1}
-                data-ghost-side={side}
-                className="wb-ghost absolute overflow-visible"
-                style={{ left: a.x, top: a.y }}
-              >
-                <path
-                  d={`M 0 0 L ${tip.x - n.x * 10} ${tip.y - n.y * 10}`}
-                  stroke={SELECTION_COLOR}
-                  strokeWidth={2}
-                  strokeLinecap="round"
-                />
-                <path d={arrowHeadPath(tip, n, 2)} fill={SELECTION_COLOR} />
-              </svg>
-            </Fragment>
+            <div
+              key={side}
+              data-anchor-item={dotsFor.id}
+              data-anchor-side={side}
+              title={
+                isTextual(dotsFor)
+                  ? 'Click for a linked copy, or drag to connect'
+                  : 'Click for an arrow, or drag to connect'
+              }
+              className="wb-anchor pointer-events-auto absolute"
+              style={{ left: a.x + n.x * ANCHOR_GAP - 7, top: a.y + n.y * ANCHOR_GAP - 7 }}
+            />
           )
         })}
       {highlight && (

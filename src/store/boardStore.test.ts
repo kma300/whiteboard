@@ -6,6 +6,7 @@ import {
   addItems,
   beginTx,
   bringToFront,
+  centerOn,
   change,
   commitTx,
   deleteSelection,
@@ -15,6 +16,7 @@ import {
   movingSet,
   redo,
   refreshFrames,
+  reveal,
   select,
   startEditing,
   setItemText,
@@ -200,5 +202,22 @@ describe('item operations', () => {
     bringToFront()
     const order = state().order
     expect(order[order.length - 1]).toBe(a.id)
+  })
+})
+
+describe('camera moves', () => {
+  // Without animation frames (as in tests) the glide lands at once.
+  it('centers a rect in the viewport at the current zoom', () => {
+    useBoard.setState({ viewport: { w: 1000, h: 800 }, camera: { x: 0, y: 0, zoom: 2 } })
+    centerOn({ x: 100, y: 50, w: 200, h: 100 })
+    expect(state().camera).toEqual({ zoom: 2, x: 500 - 200 * 2, y: 400 - 100 * 2 })
+  })
+
+  it('reveals a clipped rect with a margin and leaves a visible one alone', () => {
+    useBoard.setState({ viewport: { w: 1000, h: 800 }, camera: { x: 0, y: 0, zoom: 1 } })
+    reveal({ x: 100, y: 100, w: 200, h: 200 })
+    expect(state().camera).toEqual({ x: 0, y: 0, zoom: 1 })
+    reveal({ x: 900, y: 700, w: 200, h: 200 })
+    expect(state().camera).toEqual({ x: 1000 - 48 - 1100, y: 800 - 48 - 900, zoom: 1 })
   })
 })

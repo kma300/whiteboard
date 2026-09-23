@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest'
-import { connectorGeometry, connectorsAttachedTo, itemBounds, resolveEnd } from './connectors'
-import { createConnector, createShape } from './factories'
+import {
+  connectorGeometry,
+  connectorsAttachedTo,
+  droppedCopyPlacement,
+  itemBounds,
+  linkedCopyPlacement,
+  resolveEnd,
+} from './connectors'
+import { createConnector, createFrame, createShape } from './factories'
 import type { ConnectorStyle, Items, Rect, Side, Vec } from './types'
 
 const a = createShape({ x: 0, y: 0, w: 100, h: 100 }, 'rect', 1)
@@ -146,5 +153,52 @@ describe('connector routing around the items it connects', () => {
       }
     }
     expect(failures).toEqual([])
+  })
+})
+
+describe('where a connection dot puts a linked copy', () => {
+  const src = createShape({ x: 0, y: 0, w: 160, h: 100 }, 'rect', 1)
+
+  // The gap is half the source's size along that axis, at least 60: 80 across, 60 down.
+  it.each([
+    ['right', { x: 240, y: 0 }, 'left'],
+    ['left', { x: -240, y: 0 }, 'right'],
+    ['bottom', { x: 0, y: 160 }, 'top'],
+    ['top', { x: 0, y: -160 }, 'bottom'],
+  ] as const)('beside the %s side, attached on the side facing back', (side, at, back) => {
+    const p = linkedCopyPlacement(src, side, { [src.id]: src })
+    expect(p.rect).toEqual({ ...at, w: 160, h: 100 })
+    expect(p.side).toBe(back)
+  })
+
+  it('fans out below, then above, instead of stacking on an earlier copy', () => {
+    const items: Items = { [src.id]: src }
+    const spots: [number, number][] = []
+    for (let i = 0; i < 3; i++) {
+      const { rect } = linkedCopyPlacement(src, 'right', items)
+      const copy = createShape(rect, 'rect', 2 + i)
+      items[copy.id] = copy
+      spots.push([rect.x, rect.y])
+    }
+    expect(spots).toEqual([
+      [240, 0],
+      [240, 180],
+      [240, -180],
+    ])
+  })
+
+  it('does not count a frame around the source as taking up the spot', () => {
+    const frame = createFrame({ x: -100, y: -100, w: 1000, h: 600 }, 'F', 0)
+    const p = linkedCopyPlacement(src, 'right', { [src.id]: src, [frame.id]: frame })
+    expect(p.rect.x).toBe(240)
+  })
+
+  it('puts a dropped copy with its facing side on the release point', () => {
+    const p = droppedCopyPlacement(src, { x: 160, y: 50 }, { x: 400, y: 80 })
+    expect(p).toEqual({ rect: { x: 400, y: 30, w: 160, h: 100 }, side: 'left' })
+  })
+
+  it('refuses a dropped copy that would overlap the source', () => {
+    expect(droppedCopyPlacement(src, { x: 160, y: 50 }, { x: 170, y: 60 })).toBeNull()
   })
 })

@@ -117,7 +117,7 @@ button {
   cursor: move;
 }
 
-/* Connection dots: drag one to draw a connector. */
+/* Connection dots: click one for a linked copy, or drag one to draw a connector. */
 .wb-anchor {
   width: 14px;
   height: 14px;
@@ -133,18 +133,15 @@ button {
   background: var(--wb-blue);
 }
 
-/* Preview of the arrow a click on a connection dot creates. */
-.wb-anchor {
-  z-index: 2;
-}
-
+/* Preview of what a click on the hovered connection dot creates. */
 .wb-ghost {
-  z-index: 1;
-  opacity: 0;
+  opacity: 0.45;
   pointer-events: none;
-  transition: opacity 80ms ease-out;
+  animation: wb-ghost-in 80ms ease-out;
 }
 
-.wb-anchor:hover + .wb-ghost {
-  opacity: 0.55;
+@keyframes wb-ghost-in {
+  from {
+    opacity: 0;
+  }
 }

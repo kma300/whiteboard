@@ -3,10 +3,12 @@ import { cloneItems, collectForCopy } from '../model/clone'
 import { connectorsAttachedTo, itemBounds, withoutDanglingConnectors } from '../model/connectors'
 import {
   boxRect,
+  clamp,
   fitCamera,
   rectCenter,
   rectContains,
   screenToWorld,
+  toScreenRect,
   unionRects,
   zoomAt,
 } from '../model/geometry'
@@ -23,6 +25,7 @@ import type {
   Items,
   Rect,
   ShapeKind,
+  Side,
   Tool,
   Vec,
 } from '../model/types'
@@ -70,6 +73,8 @@ export interface BoardState {
   selection: string[]
   editingId: string | null
   hoverId: string | null
+  /** Connection dot under the pointer, on the hovered item. */
+  hoverSide: Side | null
   /** True while a pointer gesture is in progress; overlays hide themselves. */
   interacting: boolean
   marquee: Rect | null
@@ -104,6 +109,7 @@ function boardDefaults(): Omit<BoardState, 'viewport' | 'toolOptions'> {
     selection: [],
     editingId: null,
     hoverId: null,
+    hoverSide: null,
     interacting: false,
     marquee: null,
     draftStroke: null,
@@ -344,21 +350,88 @@ export function zoomToSelection(): void {
   if (b) setCamera(fitCamera(b, s.viewport, 120, 2))
 }
 
+const GLIDE_MS = 280
+let glideFrame = 0
+
+/**
+ * Moves the camera to `target` with a short ease-out. Any other camera change on the way (a
+ * scroll, a pan, the zoom buttons) ends the glide. Without animation frames or with reduced
+ * motion, the camera jumps there.
+ */
+export function glideCamera(target: Camera): void {
+  if (glideFrame) cancelAnimationFrame(glideFrame)
+  glideFrame = 0
+  const from = get().camera
+  const still =
+    typeof requestAnimationFrame !== 'function' ||
+    (typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches)
+  if (still) {
+    setCamera(target)
+    return
+  }
+  const start = performance.now()
+  let last = from
+  const step = (now: number) => {
+    if (get().camera !== last) {
+      glideFrame = 0
+      return
+    }
+    // A frame's timestamp can predate `start` by a little; clamp so the glide never runs backwards.
+    const t = clamp((now - start) / GLIDE_MS, 0, 1)
+    const e = 1 - (1 - t) ** 3
+    last =
+      t < 1
+        ? {
+            zoom: from.zoom + (target.zoom - from.zoom) * e,
+            x: from.x + (target.x - from.x) * e,
+            y: from.y + (target.y - from.y) * e,
+          }
+        : target
+    setCamera(last)
+    glideFrame = t < 1 ? requestAnimationFrame(step) : 0
+  }
+  glideFrame = requestAnimationFrame(step)
+}
+
+/** Glides the camera so `r` sits in the middle of the viewport, at the current zoom. */
+export function centerOn(r: Rect): void {
+  const s = get()
+  const c = rectCenter(r)
+  const { zoom } = s.camera
+  glideCamera({ zoom, x: s.viewport.w / 2 - c.x * zoom, y: s.viewport.h / 2 - c.y * zoom })
+}
+
+/** Glides the camera just far enough to show all of `r` with a margin. Does nothing if it shows. */
+export function reveal(r: Rect, margin = 48): void {
+  const s = get()
+  const { x, y, w, h } = toScreenRect(r, s.camera)
+  const shift = (start: number, size: number, view: number) =>
+    start < margin
+      ? margin - start
+      : start + size > view - margin
+        ? Math.max(view - margin - (start + size), margin - start)
+        : 0
+  const dx = shift(x, w, s.viewport.w)
+  const dy = shift(y, h, s.viewport.h)
+  if (dx || dy) glideCamera({ ...s.camera, x: s.camera.x + dx, y: s.camera.y + dy })
+}
+
 // ---------------------------------------------------------------------------------------------
 // Tools and transient UI state
 // ---------------------------------------------------------------------------------------------
 
 export function setTool(tool: Tool): void {
   stopEditing()
-  set({ tool, hoverId: null, ...(tool === 'select' ? {} : { selection: [] }) })
+  set({ tool, hoverId: null, hoverSide: null, ...(tool === 'select' ? {} : { selection: [] }) })
 }
 
 export function setToolOptions(partial: Partial<ToolOptions>): void {
   set({ toolOptions: { ...get().toolOptions, ...partial } })
 }
 
-export function setHover(hoverId: string | null): void {
-  if (get().hoverId !== hoverId) set({ hoverId })
+export function setHover(hoverId: string | null, hoverSide: Side | null = null): void {
+  const s = get()
+  if (s.hoverId !== hoverId || s.hoverSide !== hoverSide) set({ hoverId, hoverSide })
 }
 
 export function setInteracting(interacting: boolean): void {

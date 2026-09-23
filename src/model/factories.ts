@@ -1,3 +1,4 @@
+import { rectCenter } from './geometry'
 import { newId } from './ids'
 import { DEFAULT_FRAME, STICKY_SIZE } from './palette'
 import type {
@@ -12,6 +13,7 @@ import type {
   StickyItem,
   StrokeItem,
   TextItem,
+  TextualItem,
   Vec,
 } from './types'
 
@@ -117,6 +119,24 @@ export function createStroke(
     z,
     points: worldPoints.map(([px, py, p]) => [px - x, py - y, p]),
     ...style,
+  }
+}
+
+/** An empty item of the same kind and look as `source`, filling `rect`. */
+export function createLike(source: TextualItem, rect: Rect, z: number): TextualItem {
+  const { align, bold } = source
+  switch (source.type) {
+    case 'sticky':
+      return { ...createSticky(rectCenter(rect), source.fill, z), ...rect, align, bold }
+    case 'text': {
+      const { fontSize, color } = source
+      return { ...createText(rect, z), w: rect.w, h: rect.h, fontSize, color, align, bold }
+    }
+    case 'shape': {
+      const { fill, stroke, strokeWidth, fontSize, color } = source
+      const shape = createShape(rect, source.shape, z)
+      return { ...shape, fill, stroke, strokeWidth, fontSize, color, align, bold }
+    }
   }
 }
 

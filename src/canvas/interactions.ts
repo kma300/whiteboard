@@ -1,7 +1,13 @@
-import { itemBounds, resolveEnd } from '../model/connectors'
+import {
+  droppedCopyPlacement,
+  itemBounds,
+  linkedCopyPlacement,
+  resolveEnd,
+} from '../model/connectors'
 import {
   createConnector,
   createFrame,
+  createLike,
   createShape,
   createSticky,
   createStroke,
@@ -15,7 +21,6 @@ import {
   distToSegment,
   expandRect,
   nearestSide,
-  rectCenter,
   rectContains,
   rectContainsRect,
   rectFromPoints,
@@ -29,8 +34,17 @@ import {
 } from '../model/geometry'
 import type { Handle } from '../model/geometry'
 import { DEFAULT_FRAME, DEFAULT_SHAPE_SIZE, HIGHLIGHTER_SIZE } from '../model/palette'
-import { isBox } from '../model/types'
-import type { BoxItem, ConnectorEnd, Item, Rect, Side, StrokeItem, Vec } from '../model/types'
+import { isBox, isTextual } from '../model/types'
+import type {
+  BoxItem,
+  ConnectorEnd,
+  Item,
+  Rect,
+  Side,
+  StrokeItem,
+  TextualItem,
+  Vec,
+} from '../model/types'
 import * as B from '../store/boardStore'
 import { isTypingTarget } from '../store/commands'
 import type { Patch } from '../store/history'
@@ -58,9 +72,13 @@ interface Gesture {
 const DRAG_THRESHOLD = 3
 const DOUBLE_CLICK_MS = 400
 const MIN_ITEM_SIZE = 8
-/** On-screen length of the arrow a click on a connection dot creates. */
+/** On-screen length of the arrow a click on an image's connection dot creates. */
 export const QUICK_ARROW_PX = 140
+/** A drag from a connection dot this short that ends on empty canvas counts as a click. */
+const CLICK_SLOP_PX = 40
 const SIDES: Side[] = ['top', 'right', 'bottom', 'left']
+
+type ItemEnd = Extract<ConnectorEnd, { kind: 'item' }>
 
 const HANDLE_CURSOR: Record<Handle, string> = {
   nw: 'nwse-resize',
@@ -426,40 +444,37 @@ export function createInteractions(el: HTMLElement): () => void {
       },
       up(p) {
         B.setDraftConnector(null)
-        if (!dragged) {
-          // A plain click on a connection dot makes a standard straight arrow.
-          if (fromDot && from.kind === 'item') quickArrow(from)
+        let { end } = endFor(p)
+        if (dragged && end.kind === 'point' && overSource(p)) return
+        const dot = fromDot && from.kind === 'item' ? from : null
+        // A click on a dot, or a short drag from it that lands on empty canvas, is a quick create.
+        const short = distance(p.screen, start.screen) <= CLICK_SLOP_PX
+        if (dot && (!dragged || (end.kind === 'point' && short))) {
+          quickCreate(dot)
           return
         }
-        let { end } = endFor(p)
-        if (end.kind === 'point' && overSource(p)) return
+        if (!dragged) return
         const s = state()
         const source = sourceId ? s.items[sourceId] : undefined
         B.beginTx()
-        let spawned: BoxItem | null = null
-        if (
-          end.kind === 'point' &&
-          fromDot &&
-          source &&
-          isBox(source) &&
-          distance(p.screen, start.screen) > 40
-        ) {
-          spawned = spawnLike(source, p.world, B.nextZ())
-          if (spawned) {
-            B.addItems([spawned], false)
-            B.refreshFrames([spawned.id])
-            end = {
-              kind: 'item',
-              itemId: spawned.id,
-              side: nearestSide(boxRect(spawned), rectCenter(boxRect(source))),
-            }
-          }
+        let spawned: TextualItem | null = null
+        if (end.kind === 'point' && dot && source && isTextual(source)) {
+          // The copy's facing side lands where the line was released, so the line keeps its length.
+          const anchor = sideAnchor(boxRect(source), dot.side)
+          const place =
+            droppedCopyPlacement(source, anchor, p.world) ??
+            linkedCopyPlacement(source, dot.side, s.items)
+          spawned = createLike(source, place.rect, B.nextZ())
+          B.addItems([spawned], false)
+          B.refreshFrames([spawned.id])
+          end = { kind: 'item', itemId: spawned.id, side: place.side }
         }
         const connector = createConnector(from, end, style, B.nextZ())
         B.addItems([connector], false)
         B.setTool('select')
         if (spawned) {
           B.startEditing(spawned.id)
+          B.reveal(boxRect(spawned))
         } else {
           B.select([connector.id])
           B.commitTx()
@@ -511,18 +526,50 @@ export function createInteractions(el: HTMLElement): () => void {
     }
   }
 
-  /** Straight arrow pointing out of the clicked side, selected so its end can be dragged on. */
-  function quickArrow(from: Extract<ConnectorEnd, { kind: 'item' }>) {
+  /**
+   * A click on a connection dot. Items with text get a copy beside that side, linked by a straight
+   * arrow; the camera glides over to it and its text opens for typing, all one undo step with
+   * whatever gets typed. Other items get the arrow alone.
+   */
+  function quickCreate(from: ItemEnd) {
     const s = state()
-    const item = s.items[from.itemId]
-    if (!item || !isBox(item)) return
+    const source = s.items[from.itemId]
+    if (!source || !isBox(source)) return
+    if (!isTextual(source)) {
+      quickArrow(from, source)
+      return
+    }
+    const place = linkedCopyPlacement(source, from.side, s.items)
+    const copy = createLike(source, place.rect, B.nextZ())
+    B.beginTx()
+    B.addItems([copy], false)
+    B.refreshFrames([copy.id])
+    const end: ConnectorEnd = { kind: 'item', itemId: copy.id, side: place.side }
+    B.addItems([createConnector(from, end, 'straight', B.nextZ())], false)
+    B.startEditing(copy.id)
+    B.centerOn(place.rect)
+  }
+
+  /** Straight arrow pointing out of the clicked side, selected so its end can be dragged on. */
+  function quickArrow(from: ItemEnd, item: BoxItem) {
+    const s = state()
     const anchor = sideAnchor(boxRect(item), from.side)
     const normal = sideNormal(from.side)
     const length = QUICK_ARROW_PX / s.camera.zoom
     const tip = { x: anchor.x + normal.x * length, y: anchor.y + normal.y * length }
-    const arrow = createConnector(from, { kind: 'point', ...tip }, 'straight', B.nextZ())
     B.setTool('select')
-    B.addItems([arrow])
+    // Clicking the same dot again selects that arrow rather than stacking a copy on top of it.
+    const same = Object.values(s.items).find(
+      (it) =>
+        it.type === 'connector' &&
+        it.start.kind === 'item' &&
+        it.start.itemId === from.itemId &&
+        it.start.side === from.side &&
+        it.end.kind === 'point' &&
+        distance(it.end, tip) < 1,
+    )
+    if (same) B.select([same.id])
+    else B.addItems([createConnector(from, { kind: 'point', ...tip }, 'straight', B.nextZ())])
   }
 
   function placeSticky(p: Pointer) {
@@ -649,7 +696,11 @@ export function createInteractions(el: HTMLElement): () => void {
       return
     }
     const target = e.target as Element
-    if (target.closest('[data-anchor-side]')) return
+    const dot = anchorAt(target)
+    if (dot) {
+      B.setHover(dot.itemId, dot.side)
+      return
+    }
     const id = target.closest('[data-item-id]')?.getAttribute('data-item-id')
     const item = id ? s.items[id] : undefined
     if (canConnect(item)) {
@@ -658,8 +709,12 @@ export function createInteractions(el: HTMLElement): () => void {
     }
     const hovered = s.hoverId ? s.items[s.hoverId] : undefined
     if (hovered && isBox(hovered)) {
+      // Keep the dots while the pointer crosses the gap between the item and them.
       const zone = expandRect(boxRect(hovered), 28 / s.camera.zoom)
-      if (rectContains(zone, screenToWorld(screenOf(e), s.camera))) return
+      if (rectContains(zone, screenToWorld(screenOf(e), s.camera))) {
+        B.setHover(hovered.id)
+        return
+      }
     }
     B.setHover(null)
   }
@@ -871,33 +926,4 @@ function strokeTouches(stroke: StrokeItem, a: Vec, b: Vec, reach: number): boole
     for (const q of probes) if (distToSegment(q, pts[i - 1], pts[i]) <= reach) return true
   }
   return false
-}
-
-/** A new item like `source` (same kind and colors, empty text) centered on `at`. */
-function spawnLike(source: Item, at: Vec, z: number): BoxItem | null {
-  if (source.type === 'sticky') {
-    return {
-      ...createSticky(at, source.fill, z),
-      w: source.w,
-      h: source.h,
-      x: at.x - source.w / 2,
-      y: at.y - source.h / 2,
-    }
-  }
-  if (source.type === 'shape') {
-    const shape = createShape(
-      { x: at.x - source.w / 2, y: at.y - source.h / 2, w: source.w, h: source.h },
-      source.shape,
-      z,
-    )
-    return {
-      ...shape,
-      fill: source.fill,
-      stroke: source.stroke,
-      strokeWidth: source.strokeWidth,
-      color: source.color,
-      fontSize: source.fontSize,
-    }
-  }
-  return null
 }
