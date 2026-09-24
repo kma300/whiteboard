@@ -14,7 +14,7 @@ import {
   Trash,
   Ungroup,
 } from 'lucide-react'
-import { useState } from 'react'
+import { useLayoutEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { itemBounds } from '../model/connectors'
 import { clamp, toScreenRect, unionRects } from '../model/geometry'
@@ -107,9 +107,28 @@ function ColorMenu({
   )
 }
 
+const EDGE_GAP = 8
+
+/**
+ * Menu centered under a toolbar button. It sizes to its content, since the button it hangs from
+ * is narrower than the menu, and shifts sideways to stay inside the window.
+ */
 function Popover({ children }: { children: ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null)
+  const [shift, setShift] = useState(0)
+  useLayoutEffect(() => {
+    const r = ref.current?.getBoundingClientRect()
+    if (!r) return
+    if (r.left < EDGE_GAP) setShift(EDGE_GAP - r.left)
+    else if (r.right > window.innerWidth - EDGE_GAP)
+      setShift(window.innerWidth - EDGE_GAP - r.right)
+  }, [])
   return (
-    <div className="wb-panel absolute left-1/2 top-full z-10 mt-2 -translate-x-1/2 p-2">
+    <div
+      ref={ref}
+      className="wb-panel absolute left-1/2 top-full z-10 mt-2 w-max p-2"
+      style={{ transform: `translateX(calc(-50% + ${shift}px))` }}
+    >
       {children}
     </div>
   )
