@@ -14,10 +14,11 @@ import {
   Trash,
   Ungroup,
 } from 'lucide-react'
-import { useLayoutEffect, useRef, useState } from 'react'
-import type { ReactNode } from 'react'
+import { useCallback, useLayoutEffect, useRef, useState } from 'react'
+import type { ReactNode, RefObject } from 'react'
+import { createPortal } from 'react-dom'
 import { itemBounds } from '../model/connectors'
-import { clamp, toScreenRect, unionRects } from '../model/geometry'
+import { toScreenRect, unionRects } from '../model/geometry'
 import {
   FILL_COLORS,
   FONT_SIZES,
@@ -30,6 +31,7 @@ import type { Item, Rect, TextAlign } from '../model/types'
 import { updateSelection, useBoard } from '../store/boardStore'
 import { runCommand } from '../store/commands'
 import { IconButton, Swatch, Tip } from './buttons'
+import { FLOATING_EDGE, TOOLBAR_LEFT, popoverPosition, toolbarPosition } from './floatingLayout'
 import { CONNECTOR_STYLES, SHAPES } from './options'
 import { OptionButton, ShapeIcon } from './Toolbar'
 
@@ -38,6 +40,7 @@ const BORDER_WIDTHS = [0, 1, 2, 4, 6]
 const LINE_WIDTHS = [1, 2, 3, 4, 6]
 const NEXT_ALIGN: Record<TextAlign, TextAlign> = { left: 'center', center: 'right', right: 'left' }
 const ALIGN_ICON = { left: TextAlignStart, center: TextAlignCenter, right: TextAlignEnd }
+const CONTROL_GROUP = 'flex items-center gap-0.5 *:shrink-0'
 
 function Divider() {
   return <div className="mx-0.5 h-6 w-px bg-neutral-200" />
@@ -62,8 +65,9 @@ function ColorMenu({
   ring?: boolean
   onPick: (color: string) => void
 }) {
+  const anchorRef = useRef<HTMLDivElement>(null)
   return (
-    <div className="relative">
+    <div ref={anchorRef} className="relative">
       <button
         type="button"
         aria-label={label}
@@ -87,7 +91,7 @@ function ColorMenu({
         <Tip label={label} side="top" />
       </button>
       {open === id && (
-        <Popover>
+        <Popover anchorRef={anchorRef} onClose={() => setOpen(null)}>
           <div className="grid grid-cols-5 gap-1">
             {colors.map((c) => (
               <Swatch
@@ -107,30 +111,95 @@ function ColorMenu({
   )
 }
 
-const EDGE_GAP = 8
-
 /**
- * Menu centered under a toolbar button. It sizes to its content, since the button it hangs from
- * is narrower than the menu, and shifts sideways to stay inside the window.
+ * Menus have their own layer so a narrow or wrapped toolbar cannot squeeze them or clip them.
  */
-function Popover({ children }: { children: ReactNode }) {
+function Popover({
+  children,
+  anchorRef,
+  onClose,
+}: {
+  children: ReactNode
+  anchorRef: RefObject<HTMLDivElement | null>
+  onClose: () => void
+}) {
   const ref = useRef<HTMLDivElement>(null)
-  const [shift, setShift] = useState(0)
+  const [position, setPosition] = useState<{ x: number; y: number } | null>(null)
+  const update = useCallback(() => {
+    const anchor = anchorRef.current
+    const menu = ref.current
+    if (!anchor || !menu) return
+    const a = anchor.getBoundingClientRect()
+    const r = menu.getBoundingClientRect()
+    const toolbar = anchor.closest('[data-testid="context-toolbar"]')
+    const next = popoverPosition(
+      { x: a.left, y: a.top, w: a.width, h: a.height },
+      { w: r.width, h: r.height },
+      { w: window.innerWidth, h: window.innerHeight },
+      toolbar?.getAttribute('data-placement') === 'above' ? 'above' : 'below',
+    )
+    setPosition((previous) => (previous?.x === next.x && previous.y === next.y ? previous : next))
+  }, [anchorRef])
+
+  useLayoutEffect(update)
   useLayoutEffect(() => {
-    const r = ref.current?.getBoundingClientRect()
-    if (!r) return
-    if (r.left < EDGE_GAP) setShift(EDGE_GAP - r.left)
-    else if (r.right > window.innerWidth - EDGE_GAP)
-      setShift(window.innerWidth - EDGE_GAP - r.right)
-  }, [])
-  return (
+    let frame = 0
+    const schedule = () => {
+      if (frame) return
+      frame = requestAnimationFrame(() => {
+        frame = 0
+        update()
+      })
+    }
+    const observer = new ResizeObserver(schedule)
+    if (ref.current) observer.observe(ref.current)
+    if (anchorRef.current) observer.observe(anchorRef.current)
+    const toolbar = anchorRef.current?.closest('[data-testid="context-toolbar"]')
+    if (toolbar) observer.observe(toolbar)
+    window.addEventListener('resize', schedule)
+    return () => {
+      observer.disconnect()
+      if (frame) cancelAnimationFrame(frame)
+      window.removeEventListener('resize', schedule)
+    }
+  }, [anchorRef, update])
+  useLayoutEffect(() => {
+    const pointerDown = (e: PointerEvent) => {
+      const target = e.target as Node
+      if (!ref.current?.contains(target) && !anchorRef.current?.contains(target)) onClose()
+    }
+    const keyDown = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      e.preventDefault()
+      e.stopPropagation()
+      onClose()
+      anchorRef.current?.querySelector('button')?.focus()
+    }
+    document.addEventListener('pointerdown', pointerDown, true)
+    document.addEventListener('keydown', keyDown, true)
+    return () => {
+      document.removeEventListener('pointerdown', pointerDown, true)
+      document.removeEventListener('keydown', keyDown, true)
+    }
+  }, [anchorRef, onClose])
+
+  return createPortal(
     <div
       ref={ref}
-      className="wb-panel absolute left-1/2 top-full z-10 mt-2 w-max p-2"
-      style={{ transform: `translateX(calc(-50% + ${shift}px))` }}
+      data-testid="context-menu"
+      className="wb-panel fixed z-40 w-max overflow-y-auto p-2"
+      style={{
+        left: position?.x ?? 0,
+        top: position?.y ?? 0,
+        maxWidth: `calc(100vw - ${FLOATING_EDGE * 2}px)`,
+        maxHeight: `calc(100vh - ${FLOATING_EDGE * 2}px)`,
+        visibility: position ? 'visible' : 'hidden',
+      }}
+      onPointerDown={(e) => e.stopPropagation()}
     >
       {children}
-    </div>
+    </div>,
+    document.body,
   )
 }
 
@@ -187,6 +256,54 @@ function ContextToolbarBody() {
   const camera = useBoard((s) => s.camera)
   const viewport = useBoard((s) => s.viewport)
   const [open, setOpenState] = useState<string | null>(null)
+  const ref = useRef<HTMLDivElement>(null)
+  const shapeRef = useRef<HTMLDivElement>(null)
+  const [size, setSize] = useState({ w: 0, h: 0 })
+  const [obstacles, setObstacles] = useState<Rect[]>([])
+
+  const measureObstacles = useCallback(() => {
+    if (!ref.current) return
+    const next = [...document.querySelectorAll<HTMLElement>('.wb-panel.fixed')]
+      .filter((el) => !el.closest('[data-testid="context-toolbar"], [data-testid="context-menu"]'))
+      .map((el) => {
+        const r = el.getBoundingClientRect()
+        return { x: r.left, y: r.top, w: r.width, h: r.height }
+      })
+    setObstacles((previous) =>
+      previous.length === next.length &&
+      previous.every(
+        (r, i) => r.x === next[i].x && r.y === next[i].y && r.w === next[i].w && r.h === next[i].h,
+      )
+        ? previous
+        : next,
+    )
+  }, [])
+  useLayoutEffect(measureObstacles)
+
+  useLayoutEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const update = () => {
+      const r = el.getBoundingClientRect()
+      setSize((previous) =>
+        previous.w === r.width && previous.h === r.height ? previous : { w: r.width, h: r.height },
+      )
+    }
+    update()
+    let frame = 0
+    const observer = new ResizeObserver(() => {
+      if (frame) return
+      frame = requestAnimationFrame(() => {
+        frame = 0
+        update()
+      })
+    })
+    observer.observe(el)
+    return () => {
+      observer.disconnect()
+      if (frame) cancelAnimationFrame(frame)
+    }
+  }, [])
 
   const selected = selection.map((id) => items[id]).filter(Boolean)
   const bounds = unionRects(
@@ -247,9 +364,7 @@ function ContextToolbarBody() {
     />
   )
 
-  // Sit clear of the connection dots, which float 16px outside the selection.
-  const top = box.y - 76 < 64 ? box.y + box.h + 32 : box.y - 76
-  const left = clamp(box.x + box.w / 2, 220, Math.max(220, viewport.w - 220))
+  const position = toolbarPosition(box, size, viewport, obstacles)
   const firstTextual = textual[0]
   const align = firstTextual?.align ?? 'center'
   const AlignIcon = ALIGN_ICON[align]
@@ -258,9 +373,16 @@ function ContextToolbarBody() {
 
   return (
     <div
+      ref={ref}
       data-testid="context-toolbar"
-      className="wb-panel fixed z-30 flex -translate-x-1/2 items-center gap-0.5 px-1 py-1"
-      style={{ left, top }}
+      data-placement={position.placement}
+      className="wb-panel fixed z-30 flex w-max flex-wrap items-center gap-x-0.5 gap-y-1 px-1 py-1 *:shrink-0"
+      style={{
+        left: position.x,
+        top: position.y,
+        maxWidth: Math.max(0, viewport.w - TOOLBAR_LEFT - FLOATING_EDGE),
+        visibility: size.w ? 'visible' : 'hidden',
+      }}
       onPointerDown={(e) => e.stopPropagation()}
     >
       {stickies.length > 0 &&
@@ -272,8 +394,8 @@ function ContextToolbarBody() {
         )}
 
       {firstShape && (
-        <>
-          <div className="relative">
+        <div className={CONTROL_GROUP}>
+          <div ref={shapeRef} className="relative">
             <OptionButton
               label="Shape"
               tipSide="top"
@@ -283,7 +405,7 @@ function ContextToolbarBody() {
               <ShapeIcon kind={firstShape.shape} />
             </OptionButton>
             {open === 'shape' && (
-              <Popover>
+              <Popover anchorRef={shapeRef} onClose={() => setOpenState(null)}>
                 <div className="grid grid-cols-3 gap-0.5">
                   {SHAPES.map((s) => (
                     <OptionButton
@@ -311,13 +433,13 @@ function ContextToolbarBody() {
             format={(v) => (v === 0 ? 'No border' : `${v}px`)}
             onChange={(v) => updateType('shape', (it) => ({ ...it, strokeWidth: v }))}
           />
-        </>
+        </div>
       )}
 
       {frames.length > 0 && colorMenu('frame', 'Frame color', frames[0].fill, FRAME_FILLS)}
 
       {textual.length > 0 && (
-        <>
+        <div className={CONTROL_GROUP}>
           {(stickies.length > 0 || firstShape || frames.length > 0) && <Divider />}
           {sized.length > 0 && (
             <NumberSelect
@@ -358,11 +480,12 @@ function ContextToolbarBody() {
             }}
           />
           {inked.length > 0 && colorMenu('ink', 'Text color', inked[0].color, INK_COLORS)}
-        </>
+        </div>
       )}
 
       {firstConnector && (
-        <>
+        <div className={CONTROL_GROUP}>
+          {textual.length > 0 && <Divider />}
           {CONNECTOR_STYLES.map(({ style, label, icon }) => (
             <IconButton
               tipSide="top"
@@ -401,69 +524,71 @@ function ContextToolbarBody() {
             format={(v) => `${v}px`}
             onChange={(v) => updateType('connector', (it) => ({ ...it, strokeWidth: v }))}
           />
-        </>
+        </div>
       )}
 
       {strokes.length > 0 &&
         colorMenu('stroke', 'Pen color', strokes[0].color, [...PEN_COLORS, ...HIGHLIGHTER_COLORS])}
 
-      <Divider />
-      {selected.length > 1 && !grouped && (
+      <div className={CONTROL_GROUP}>
+        <Divider />
+        {selected.length > 1 && !grouped && (
+          <IconButton
+            tipSide="top"
+            icon={Group}
+            label="Group"
+            shortcut="⌘G"
+            onClick={() => runCommand('group')}
+          />
+        )}
+        {grouped && (
+          <IconButton
+            tipSide="top"
+            icon={Ungroup}
+            label="Ungroup"
+            shortcut="⇧⌘G"
+            onClick={() => runCommand('ungroup')}
+          />
+        )}
         <IconButton
           tipSide="top"
-          icon={Group}
-          label="Group"
-          shortcut="⌘G"
-          onClick={() => runCommand('group')}
+          icon={BringToFront}
+          label="Bring to front"
+          shortcut="⌘]"
+          onClick={() => runCommand('bringToFront')}
         />
-      )}
-      {grouped && (
         <IconButton
           tipSide="top"
-          icon={Ungroup}
-          label="Ungroup"
-          shortcut="⇧⌘G"
-          onClick={() => runCommand('ungroup')}
+          icon={SendToBack}
+          label="Send to back"
+          shortcut="⌘["
+          onClick={() => runCommand('sendToBack')}
         />
-      )}
-      <IconButton
-        tipSide="top"
-        icon={BringToFront}
-        label="Bring to front"
-        shortcut="⌘]"
-        onClick={() => runCommand('bringToFront')}
-      />
-      <IconButton
-        tipSide="top"
-        icon={SendToBack}
-        label="Send to back"
-        shortcut="⌘["
-        onClick={() => runCommand('sendToBack')}
-      />
-      <IconButton
-        tipSide="top"
-        icon={allLocked ? LockOpen : Lock}
-        label={allLocked ? 'Unlock' : 'Lock'}
-        shortcut="⇧⌘L"
-        onClick={() => runCommand('toggleLock')}
-      />
-      <IconButton
-        tipSide="top"
-        icon={Copy}
-        label="Duplicate"
-        shortcut="⌘D"
-        testId="ctx-duplicate"
-        onClick={() => runCommand('duplicate')}
-      />
-      <IconButton
-        tipSide="top"
-        icon={Trash}
-        label="Delete"
-        shortcut="⌫"
-        testId="ctx-delete"
-        disabled={allLocked}
-        onClick={() => runCommand('delete')}
-      />
+        <IconButton
+          tipSide="top"
+          icon={allLocked ? LockOpen : Lock}
+          label={allLocked ? 'Unlock' : 'Lock'}
+          shortcut="⇧⌘L"
+          onClick={() => runCommand('toggleLock')}
+        />
+        <IconButton
+          tipSide="top"
+          icon={Copy}
+          label="Duplicate"
+          shortcut="⌘D"
+          testId="ctx-duplicate"
+          onClick={() => runCommand('duplicate')}
+        />
+        <IconButton
+          tipSide="top"
+          icon={Trash}
+          label="Delete"
+          shortcut="⌫"
+          testId="ctx-delete"
+          disabled={allLocked}
+          onClick={() => runCommand('delete')}
+        />
+      </div>
     </div>
   )
 }

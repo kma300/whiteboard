@@ -75,10 +75,20 @@ export function Canvas() {
     const el = ref.current
     if (!el) return
     const cleanup = createInteractions(el)
-    const ro = new ResizeObserver(() => setViewport(el.clientWidth, el.clientHeight))
+    const measure = () => setViewport(el.clientWidth, el.clientHeight)
+    let frame = 0
+    measure()
+    const ro = new ResizeObserver(() => {
+      if (frame) return
+      frame = requestAnimationFrame(() => {
+        frame = 0
+        measure()
+      })
+    })
     ro.observe(el)
     return () => {
       ro.disconnect()
+      if (frame) cancelAnimationFrame(frame)
       cleanup()
     }
   }, [])
