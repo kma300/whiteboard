@@ -27,6 +27,7 @@ import {
   PEN_COLORS,
   STICKY_COLORS,
 } from '../model/palette'
+import { isTextual, textFontSize } from '../model/types'
 import type { Item, Rect, TextAlign } from '../model/types'
 import { updateSelection, useBoard } from '../store/boardStore'
 import { runCommand } from '../store/commands'
@@ -319,7 +320,6 @@ function ContextToolbarBody() {
   const connectors = selected.filter((it) => it.type === 'connector')
   const strokes = selected.filter((it) => it.type === 'stroke')
   const textual = [...stickies, ...shapes, ...texts]
-  const sized = [...shapes, ...texts]
   const inked = [...shapes, ...texts]
   const grouped = selected.some((it) => it.groupId)
   const allLocked = selected.every((it) => it.locked)
@@ -441,17 +441,12 @@ function ContextToolbarBody() {
       {textual.length > 0 && (
         <div className={CONTROL_GROUP}>
           {(stickies.length > 0 || firstShape || frames.length > 0) && <Divider />}
-          {sized.length > 0 && (
-            <NumberSelect
-              label="Font size"
-              value={sized[0].fontSize}
-              options={FONT_SIZES}
-              onChange={(v) => {
-                updateType('text', (it) => ({ ...it, fontSize: v }))
-                updateType('shape', (it) => ({ ...it, fontSize: v }))
-              }}
-            />
-          )}
+          <NumberSelect
+            label="Font size"
+            value={textFontSize(firstTextual)}
+            options={FONT_SIZES}
+            onChange={(v) => updateSelection((it) => (isTextual(it) ? { ...it, fontSize: v } : it))}
+          />
           <IconButton
             tipSide="top"
             icon={Bold}

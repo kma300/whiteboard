@@ -127,7 +127,13 @@ export function createLike(source: TextualItem, rect: Rect, z: number): TextualI
   const { align, bold } = source
   switch (source.type) {
     case 'sticky':
-      return { ...createSticky(rectCenter(rect), source.fill, z), ...rect, align, bold }
+      return {
+        ...createSticky(rectCenter(rect), source.fill, z),
+        ...rect,
+        fontSize: source.fontSize,
+        align,
+        bold,
+      }
     case 'text': {
       const { fontSize, color } = source
       return { ...createText(rect, z), w: rect.w, h: rect.h, fontSize, color, align, bold }

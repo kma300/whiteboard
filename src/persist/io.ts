@@ -74,7 +74,10 @@ export function sanitizeItem(raw: unknown): Item | null {
   switch (raw.type) {
     case 'sticky': {
       const b = box(raw)
-      return b && { ...b, type: 'sticky', text, fill: color(raw.fill, '#FFF3A3'), align, bold }
+      const fontSize = isNum(raw.fontSize) && raw.fontSize > 0 ? raw.fontSize : undefined
+      return (
+        b && { ...b, type: 'sticky', text, fill: color(raw.fill, '#FFF3A3'), fontSize, align, bold }
+      )
     }
     case 'text': {
       const b = box(raw)

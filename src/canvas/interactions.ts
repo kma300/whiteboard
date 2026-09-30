@@ -239,10 +239,7 @@ export function createInteractions(el: HTMLElement): () => void {
     const single = targets.length === 1 ? targets[0] : null
     const corner = handle.length === 2
     const keepAspect =
-      targets.length > 1 ||
-      single?.type === 'sticky' ||
-      single?.type === 'image' ||
-      (single?.type === 'text' && corner)
+      targets.length > 1 || single?.type === 'image' || (single?.type === 'text' && corner)
     const hasFrame = targets.some((it) => it.type === 'frame')
     B.beginTx()
     return {

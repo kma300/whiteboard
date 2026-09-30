@@ -24,6 +24,8 @@ the development server running and use `npm run app:dev` in another terminal.
 
 * Infinite canvas with trackpad panning, zoom, a dot grid, and a minimap.
 * Sticky notes, text, six shape types, images, frames, pen, and highlighter.
+* Resize sticky notes by dragging any edge or corner. Width and height can change independently;
+  hold Shift to keep the proportions. Choose the text size in the floating toolbar.
 * Click a blue connection handle to create an empty matching item linked by an arrow, ready
   for typing. Repeated clicks create separate branches. Drag the handle onto an existing item
   to connect it, or onto empty canvas to create an item at that location.

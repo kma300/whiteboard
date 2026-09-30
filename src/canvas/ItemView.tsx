@@ -2,6 +2,7 @@ import { memo, useLayoutEffect, useMemo, useRef } from 'react'
 import type { CSSProperties } from 'react'
 import { arrowHeadPath, connectorGeometry } from '../model/connectors'
 import { shapePath, strokePath } from '../model/shapes'
+import { textFontSize } from '../model/types'
 import type {
   ConnectorItem,
   FrameItem,
@@ -68,12 +69,12 @@ export const ItemView = memo(function ItemView({ id }: { id: string }) {
 })
 
 function StickyView({ item, editing }: { item: StickyItem; editing: boolean }) {
-  const pad = Math.max(8, item.w * 0.07)
+  const pad = Math.max(4, Math.min(item.w, item.h) * 0.07)
   const fontSize = useFitText(
     item.text,
-    item.w - pad * 2,
-    item.h - pad * 2,
-    Math.round(item.w * 0.14),
+    Math.max(1, item.w - pad * 2),
+    Math.max(1, item.h - pad * 2),
+    textFontSize(item),
     item.bold,
   )
   const style = textStyle(fontSize, item.align, item.bold, '#1F1F1F')
@@ -81,7 +82,12 @@ function StickyView({ item, editing }: { item: StickyItem; editing: boolean }) {
     <div
       data-item-id={item.id}
       className="wb-sticky"
-      style={{ ...place(item.x, item.y, item.w, item.h), background: item.fill, padding: pad }}
+      style={{
+        ...place(item.x, item.y, item.w, item.h),
+        background: item.fill,
+        padding: pad,
+        overflow: 'hidden',
+      }}
     >
       {editing ? (
         <TextEditor id={item.id} value={item.text} style={style} />

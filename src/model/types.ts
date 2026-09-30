@@ -24,6 +24,8 @@ export interface StickyItem extends BoxBase {
   type: 'sticky'
   text: string
   fill: string
+  /** Missing on existing notes until a text size is chosen. */
+  fontSize?: number
   align: TextAlign
   bold?: boolean
 }
@@ -142,4 +144,8 @@ export function isBox(item: Item): item is BoxItem {
 
 export function isTextual(item: Item): item is TextualItem {
   return item.type === 'sticky' || item.type === 'text' || item.type === 'shape'
+}
+
+export function textFontSize(item: TextualItem): number {
+  return item.fontSize ?? Math.round(item.w * 0.14)
 }

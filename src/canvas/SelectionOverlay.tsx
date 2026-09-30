@@ -54,7 +54,7 @@ function handlesFor(selected: Item[]): Handle[] {
   if (!boxes.length) return []
   if (selected.length > 1) return CORNERS
   const only = boxes[0]
-  if (only.type === 'sticky' || only.type === 'image') return CORNERS
+  if (only.type === 'image') return CORNERS
   if (only.type === 'text') return TEXT_HANDLES
   return ALL
 }

@@ -39,6 +39,19 @@ function sampleDoc(): BoardDoc {
 }
 
 describe('board files', () => {
+  it('preserves rectangular note dimensions and text size in exports and clipboard data', () => {
+    const note = {
+      ...createSticky({ x: 0, y: 0 }, '#FFF3A3', 1),
+      w: 320,
+      h: 120,
+      fontSize: 48,
+      text: 'A wider note',
+    }
+    const doc = { ...sampleDoc(), items: { [note.id]: note } }
+    expect(parseBoardJson(exportBoardJson(doc)).items[note.id]).toMatchObject(note)
+    expect(parseClipboard(serializeClipboard([note]))?.[0]).toMatchObject(note)
+  })
+
   it('round-trips an exported board', () => {
     const doc = sampleDoc()
     const parsed = parseBoardJson(exportBoardJson(doc))
@@ -67,6 +80,16 @@ describe('board files', () => {
 })
 
 describe('item sanitizing', () => {
+  it.each([undefined, null, 'large', 0, -12, Infinity])(
+    'keeps notes usable when their text size is %s',
+    (fontSize) => {
+      const note = { ...createSticky({ x: 0, y: 0 }, '#FFF3A3', 1), fontSize }
+      expect(sanitizeItem(note)).toMatchObject({ type: 'sticky', w: 200, h: 200 })
+      const item = sanitizeItem(note)
+      expect(item?.type === 'sticky' && item.fontSize).toBeUndefined()
+    },
+  )
+
   it('refuses remote images and bad geometry', () => {
     const base = { id: 'i1', z: 1, x: 0, y: 0, w: 10, h: 10 }
     expect(sanitizeItem({ ...base, type: 'image', src: 'https://example.com/a.png' })).toBeNull()
