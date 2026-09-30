@@ -12,6 +12,11 @@ dist
 dist-ssr
 release
 *.local
+.env
+.env.*
+!.env.example
+*.pem
+*.key
 
 # Editor directories and files
 .vscode/*

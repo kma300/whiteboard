@@ -2,3 +2,6 @@ dist
 release
 node_modules
 package-lock.json
+
+# Preserve asterisk bullets in the README.
+README.md

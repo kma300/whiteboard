@@ -3,6 +3,19 @@
   "private": true,
   "version": "0.1.0",
   "description": "A standalone infinite whiteboard",
+  "license": "MIT",
+  "author": "Ken Ma",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kma300/whiteboard.git"
+  },
+  "homepage": "https://github.com/kma300/whiteboard#readme",
+  "bugs": {
+    "url": "https://github.com/kma300/whiteboard/issues"
+  },
+  "engines": {
+    "node": ">=22.12.0"
+  },
   "type": "module",
   "main": "electron/main.cjs",
   "scripts": {

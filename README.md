@@ -1,65 +1,100 @@
 # Whiteboard
 
-A standalone, Miro-style infinite whiteboard. It runs in the browser and as a macOS desktop app
-(Electron). Boards are saved locally in IndexedDB; nothing leaves the machine.
+An open source infinite canvas for brainstorming, diagrams, and Kanban boards. Use it in a
+browser or as a standalone macOS app. Boards save locally on your device, with no account
+required.
 
-## Run
+![A brainstorm board in Whiteboard](docs/whiteboard.png)
+
+## Start developing
+
+Use Node.js 24 and npm.
 
 ```bash
-npm install
-npm run dev          # browser at http://localhost:5173
-npm run app:build    # builds release/mac-arm64/Whiteboard.app (ad-hoc signed)
-npm run app:open     # opens the installed app in /Applications
-npm run verify       # tsc, oxlint, prettier, vitest, vite build
+git clone https://github.com/kma300/whiteboard.git
+cd whiteboard
+npm ci
+npm run dev
 ```
 
-The app is installed at `/Applications/Whiteboard.app`. After changing the code, run
-`npm run app:build` and replace the installed app with `release/mac-arm64/Whiteboard.app`.
-`npm run app:dev` opens the Electron shell against a running `npm run dev` server.
+Open `http://localhost:5173` in your browser. To run the desktop app during development, keep
+the development server running and use `npm run app:dev` in another terminal.
 
 ## Features
 
-- Infinite dot-grid canvas: pan with trackpad scroll, Space+drag, middle mouse, or the Hand tool.
-  Zoom with pinch, Cmd+scroll, the zoom controls, Cmd+0, Shift+1 (fit), Shift+2 (selection).
-- Sticky notes (auto-fitting text), text, shapes, connectors (straight, elbow, curved, with
-  arrowheads), pen, highlighter, eraser, frames, and images (upload, drag and drop, paste).
-- Hover a sticky, shape, or text box and click a blue dot to add a matching copy on that side,
-  linked by an arrow. The camera glides to the copy and you can type into it right away; click
-  the same dot again and the next copy fans out beside the first. Hovering a dot previews where
-  the copy lands. Or drag the dot to draw the connection yourself: drop it on another item to
-  attach it, or on empty canvas to create the copy at that spot. Images get a plain arrow.
-- Connectors that end up facing away from each other after a move switch to the facing sides,
-  and elbow and curved lines route around the items they connect.
-- Select, Shift+click, marquee, move, resize, Alt+drag to duplicate, group, lock, layer order,
-  and a floating toolbar for colors, text, and line styles.
-- Undo and redo for every change, copy/cut/paste, a minimap, and board templates (Kanban,
-  Retrospective, Brainstorm).
-- Dashboard with thumbnails, search, rename, duplicate, delete, and JSON export and import.
+* Infinite canvas with trackpad panning, zoom, a dot grid, and a minimap.
+* Sticky notes, text, six shape types, images, frames, pen, and highlighter.
+* Click a blue connection handle to create an empty matching item linked by an arrow, ready
+  for typing. Repeated clicks create separate branches. Drag the handle onto an existing item
+  to connect it, or onto empty canvas to create an item at that location.
+* Straight, elbow, and curved connectors that stay attached when items move.
+* Floating controls for shape, color, borders, text, and arrows. Menus stay inside the window,
+  and related controls stay together in smaller windows.
+* Selection, resizing, grouping, locking, duplication, and layer controls.
+* Undo and redo, copy and paste, and customizable tool shortcuts.
+* Blank, Brainstorm, Kanban, and Retrospective templates.
+* A board dashboard with search, rename, duplicate, and JSON import and export.
+
+## Build
+
+Build the browser app and preview it locally:
+
+```bash
+npm run build
+npm run preview
+```
+
+Build the desktop app on a Mac with Apple Silicon:
+
+```bash
+npm run app:build
+```
+
+The app is created at `release/mac-arm64/Whiteboard.app`. Copy it to `/Applications` to install
+it. Quit and reopen the app after replacing an installed version.
+
+The desktop build uses a local signature. Distribution to other Macs requires appropriate
+Apple signing and notarization.
 
 ## Shortcuts
 
-Tool keys are editable: click the keyboard button in the top bar, pick a tool, press a key.
-The defaults:
+* `V`, `H`, `N`, `T`, `S`, `L`, `P`, `E`, `F`: Select, Hand, Sticky, Text, Shape, Connector,
+  Pen, Eraser, and Frame.
+* `R` and `O`: Rectangle and Ellipse.
+* `Space` with drag: Pan. Use trackpad scrolling to pan and pinch to zoom.
+* `Cmd+Z` and `Shift+Cmd+Z`: Undo and redo.
+* `Cmd+C`, `Cmd+X`, and `Cmd+V`: Copy, cut, and paste.
+* `Cmd+D`: Duplicate. `Cmd+G` and `Shift+Cmd+G`: Group and ungroup.
+* `Cmd+]` and `Cmd+[`: Bring to front and send to back.
+* `Shift+Cmd+L`: Lock or unlock.
+* `Enter`: Edit the selected item's text. `Escape`: Finish editing or close a menu.
+* Arrow keys: Move by 1 unit, or 10 with Shift. Delete or Backspace removes the selection.
+* `Cmd+0`: Actual size. `Shift+1`: Fit the board. `Shift+2`: Fit the selection.
 
-| Key                   | Action                                                           |
-| --------------------- | ---------------------------------------------------------------- |
-| V H N T S L P E F     | Select, Hand, Sticky, Text, Shape, Connector, Pen, Eraser, Frame |
-| R / O                 | Rectangle / ellipse                                              |
-| Cmd+Z / Shift+Cmd+Z   | Undo / redo                                                      |
-| Cmd+C / Cmd+X / Cmd+V | Copy / cut / paste                                               |
-| Cmd+D                 | Duplicate                                                        |
-| Cmd+G / Shift+Cmd+G   | Group / ungroup                                                  |
-| Cmd+] / Cmd+[         | Bring to front / send to back                                    |
-| Shift+Cmd+L           | Lock / unlock                                                    |
-| Enter                 | Edit the selected item's text                                    |
-| Arrows (+Shift)       | Nudge by 1 (10)                                                  |
-| Delete / Backspace    | Delete                                                           |
+Tool keys can be changed using the keyboard button in the top bar. Browser keyboard commands
+also support Ctrl where appropriate.
 
-## Notes
+## Your data
 
-- The desktop app stores boards in `~/Library/Application Support/Whiteboard`. The browser
-  version stores them per origin, so the two do not share boards. Use JSON export and import to
-  move a board between them.
-- The app is ad-hoc signed for this Mac. Sharing it with other Macs needs a Developer ID
-  signature and notarization.
-- Single-user and local by design: there is no real-time collaboration.
+The browser stores boards in IndexedDB for the current site. The desktop app stores its data
+under `~/Library/Application Support/Whiteboard`. Browser and desktop boards are separate;
+use JSON export and import to move them between installations.
+
+The app is designed for personal use. It does not provide collaboration or a hosted sync
+service.
+
+## Contributing
+
+Issues and pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for the development
+workflow.
+
+```bash
+npm run verify
+```
+
+This runs TypeScript checks, lint, formatting checks, the test suite, and a production build.
+GitHub Actions runs the same checks for pushes and pull requests.
+
+## License
+
+[MIT](LICENSE). Copyright (c) 2026 Ken Ma.
